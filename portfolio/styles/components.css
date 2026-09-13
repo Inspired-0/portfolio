@@ -1,0 +1,710 @@
+/*
+ * components.css — how the content blocks look: hero, buttons, quick facts, chapters and
+ * the career line, per-chapter results, the process scheme, case cards with their inline
+ * details, the case dialog, approach steps, fit directions, contacts, the footer disclaimer
+ * and the chapter-rail link states (including `.is-current`).
+ *
+ * Responsibility: surfaces, type roles and colour inside the blocks. Where a block sits on
+ * the page — container width, section rhythm, the sticky header, the #path grid and the
+ * rail's two shapes — stays in layout.css and is never repeated here. Tokens come from
+ * base.css; this file declares no custom property and redefines none.
+ *
+ * Load order: fonts.css → base.css → layout.css → this file. Being last, it can override the
+ * shell rules it deliberately overrides (the flow "owl" on .chapter__body, the inline-link
+ * appearance of the controls it owns); every override is commented where it happens.
+ *
+ * Colour rules applied throughout (contrast values measured with the WCAG 2.1 formula and
+ * recorded in base.css; no new colour is introduced by this file):
+ *   - body-size text is --color-text (14.03:1) or --color-muted (5.44:1) on --color-bg;
+ *   - --color-accent #285547 (7.70:1) carries link and control text and control borders;
+ *   - --color-accent-2 terracotta #B4532A (4.54:1) is used ONLY for small non-text details
+ *     — list markers, the career-line marker, the takeaway rule. It never carries
+ *     body-size text: the margin over the 4.5:1 floor is too thin to spend on running copy.
+ *   - --color-rule #C9C2B1 (1.61:1) is decorative only: card hairlines and separators,
+ *     never a control boundary (WCAG 1.4.11 wants 3:1 for those) and never text.
+ *
+ * Reserved and deliberately absent: `.case-card--open` — an open dialog marks nothing on the
+ * card behind it. Exactly one rule in this project hides case details, in the case-card
+ * section below: it needs both `data-js="on"` (the dialog can open) and the node still being
+ * inside its card. Nothing else may hide them — with JavaScript off, or once the node has
+ * moved into the dialog, they are the readable case description
+ * (spec §11 «Надёжность», tests/static-fallback.spec.js).
+ */
+
+/* --- Skip-link target ----------------------------------------------------------------- */
+
+/*
+ * <main tabindex="-1"> is the skip-link target: a non-interactive element that is focused
+ * programmatically, never by tabbing. WCAG 2.4.7 «Focus Visible» applies to user-interface
+ * components; an outline drawn around the whole content column after pressing the skip link
+ * is noise, not feedback — the viewport jump is the feedback. The project rule "never
+ * `outline: none`" stays in force for every control.
+ */
+#main:focus {
+  outline: none;
+}
+
+/* --- Hero ------------------------------------------------------------------------------ */
+
+/*
+ * The first screen is typography only (spec §4, §16): display face at --step-4 from
+ * base.css, then three descending voices — subtitle, tagline, context line. No panel, no
+ * image, no decorative movement (motion belongs to Task 8).
+ *
+ * The title opts out of the reading measure that layout.css puts on paragraphs: 62ch of
+ * 40–80 px display type would be far wider than the container, and headings are balanced by
+ * `text-wrap: balance` in base.css instead. 20ch keeps the h1 to two or three lines on a
+ * wide screen so it reads as a statement rather than a banner.
+ */
+.hero__title {
+  max-inline-size: 20ch;
+}
+
+/* Lead voice under the title: --step-1 per the brief, slightly tighter leading than body. */
+.hero__subtitle {
+  font-size: var(--step-1);
+  line-height: 1.4;
+}
+
+/*
+ * Skills line. Small and spaced out so it reads as a label row rather than a sentence; the
+ * separators are middots in the HTML, so nothing here depends on generated content.
+ * --color-muted on --color-bg = 5.44:1 (base.css), above the 4.5:1 floor for this size.
+ */
+.hero__tagline {
+  font-size: var(--step--1);
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+/* The addressee line: same quiet voice as the tagline, normal tracking (it is a sentence). */
+.hero__context {
+  font-size: var(--step--1);
+  color: var(--color-muted);
+}
+
+/*
+ * Buttons row. Mobile-first: stacked and left-aligned below 480 px (brief), side by side
+ * from 480 px up. `align-items: flex-start` keeps each button its content width in the
+ * stacked state — full-bleed buttons would read as an app, not an editorial page.
+ * `flex-wrap: wrap` is the safety net for the row state at large text sizes / 200 % zoom.
+ */
+.hero__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (min-width: 480px) {
+  .hero__actions {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* --- Buttons --------------------------------------------------------------------------- */
+
+/*
+ * Both buttons are anchors. `inline-flex` + centring gives the label a real box, and the
+ * 44 px minimums make the hit area at least 44 × 44 px (WCAG 2.5.5 target size) even for a
+ * one-word label. The underline base.css puts on every anchor is removed: a filled or
+ * outlined box already reads as a control, and the underline would fight the border.
+ *
+ * Keyboard focus comes from the base.css `:focus-visible` rule — a 2 px --color-accent
+ * outline at 2 px offset, drawn on the page background (7.70:1, well over the 3:1 that
+ * WCAG 1.4.11 asks of a focus indicator). It is not repeated here so there is one place
+ * where the ring is defined.
+ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0.6rem 1.4rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: var(--step-0);
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+}
+
+/*
+ * Primary: filled with --color-accent, label in --color-bg.
+ * #F6F4EF on #285547 = 7.70:1 (the pair is symmetric, so it is the value base.css records
+ * for accent-on-background) — AA and AAA for any size.
+ */
+.button--primary {
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/*
+ * Hover darkens the fill instead of touching the label: graphite under the same background
+ * colour — #F6F4EF on #202622 = 14.03:1, so the contrast goes up, never down.
+ */
+.button--primary:hover {
+  background-color: var(--color-text);
+  color: var(--color-bg);
+}
+
+/*
+ * Ghost: outlined. The border is --color-accent, not --color-rule: it is the only thing
+ * that identifies the control, so it needs the 3:1 of WCAG 1.4.11 (#285547 gives 7.70:1);
+ * the hairline token sits at 1.61:1 and is decoration only. Label in the same accent.
+ */
+.button--ghost {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Hover fills the outline instead of recolouring the text — same 7.70:1 pair inverted. */
+.button--ghost:hover {
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* --- Quick facts ------------------------------------------------------------------------ */
+
+/*
+ * Three claims under the hero. The <ul> loses its UA marker and indent and gets a terracotta
+ * square instead, set in the left margin so the text column still starts at the page edge.
+ * The marker is a 6 px non-text detail, which is what --color-accent-2 is reserved for.
+ */
+.quick-facts {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.quick-facts__item {
+  position: relative;
+  padding-inline-start: 1.15rem;
+}
+
+.quick-facts__item::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  /* 0.62em from the top lines the square up with the middle of the first line (1.6 leading). */
+  inset-block-start: 0.62em;
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  background-color: var(--color-accent-2);
+}
+
+/* --- Chapters and the career line -------------------------------------------------------- */
+
+/*
+ * Each chapter hangs off a vertical hairline — the career line of spec §16, drawn as the
+ * chapter's own start border plus a marker, never an image. The line is a segment per
+ * chapter (the chapters are separated by --space-chapter from layout.css), which reads as a
+ * timeline without needing an extra wrapper element.
+ *
+ * The padding is what keeps the marker inside the section gutter: the marker hangs 5 px into
+ * the padding area of the section, and --gutter is at least 16 px, so nothing can reach past
+ * the viewport edge at 360 px.
+ */
+.chapter {
+  position: relative;
+  border-inline-start: 1px solid var(--color-rule);
+  padding-inline-start: clamp(0.9rem, 0.6rem + 1.2vw, 1.6rem);
+}
+
+/*
+ * The marker: a 9 px terracotta dot centred on the hairline, level with the chapter title.
+ * Non-text detail, so --color-accent-2 applies; at 4.54:1 it also clears the 3:1 that WCAG
+ * 1.4.11 asks of a meaningful graphic.
+ */
+.chapter::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0.45em;
+  /* -5px against a 1px border centres the 9px dot on the line (border box spans -1…0). */
+  inset-inline-start: -5px;
+  inline-size: 9px;
+  block-size: 9px;
+  border-radius: 50%;
+  background-color: var(--color-accent-2);
+}
+
+/* Period, role and, for ReStaff, «параллельный проект». --color-muted = 5.44:1 on the bg. */
+.chapter__meta {
+  font-size: var(--step--1);
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+
+/* The opening paragraph of a chapter carries the story; --step-1 per the base.css scale. */
+.chapter__lead {
+  font-size: var(--step-1);
+  line-height: 1.45;
+}
+
+/*
+ * .chapter__body is a plain wrapper around the "what I did" paragraphs, and the prologue's
+ * copy of it is empty. `:empty` cannot be used to collapse it: the element contains a
+ * whitespace text node, and MDN states that the Selectors Level 4 redefinition of `:empty`
+ * (which would match whitespace-only elements) is "changed to act like
+ * :-moz-only-whitespace, but no browser currently supports this yet".
+ * Source: https://developer.mozilla.org/en-US/docs/Web/CSS/:empty
+ *
+ * So the spacing moves off the wrapper and onto its children: the wrapper's own flow margin
+ * from layout.css (`.chapter > * + *`) is zeroed — otherwise the empty div would
+ * self-collapse to a --space-flow gap that cannot escape the article, because a grid item
+ * (every .chapter is one) establishes an independent formatting context — and the first
+ * child takes that margin instead. With no children there is no margin and no gap.
+ */
+.chapter__body {
+  margin-block-start: 0;
+}
+
+.chapter__body > :first-child {
+  margin-block-start: var(--space-flow);
+}
+
+/* Paragraph rhythm inside the wrapper, tied to the text size rather than the page rhythm. */
+.chapter__body > * + * {
+  margin-block-start: 0.75em;
+}
+
+/*
+ * The chapter's conclusion, set apart by a terracotta rule plus a weight change — the shape
+ * of the block, not colour alone, is what marks it (and the text itself stays --color-text
+ * at 14.03:1). The rule is a 3 px non-text detail: --color-accent-2 territory.
+ */
+.chapter__takeaway {
+  border-inline-start: 3px solid var(--color-accent-2);
+  padding-inline-start: 0.9rem;
+  font-weight: 600;
+}
+
+/* --- Results ----------------------------------------------------------------------------- */
+
+/*
+ * Per-chapter results. Numbers, ranges and arrows are plain text in their final form — no
+ * count-up, no per-digit styling, nothing that could hide a value before scripts run
+ * (CLAUDE.md, spec §11). `overflow-wrap` from base.css lets long items break at 360 px, and
+ * the item never sets `white-space: nowrap`, so "25–40 → 10–15 минут" can wrap mid-range
+ * instead of pushing the page sideways.
+ */
+.results {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.results__item {
+  position: relative;
+  padding-inline-start: 1.15rem;
+}
+
+/* Same terracotta marker as the quick facts — a 6 px square, non-text detail. */
+.results__item::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0.62em;
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  background-color: var(--color-accent-2);
+}
+
+/* --- Process scheme ------------------------------------------------------------------------ */
+
+/*
+ * The reconstructed process, built from HTML/CSS as spec §10 requires (no image). The <ol>
+ * keeps its list semantics and its UA numbering — `list-style-position: inside` moves the
+ * numeral into the chip instead of the gutter, and nothing is generated by CSS, so the step
+ * order is carried by the markup and survives with styles off.
+ */
+.process-scheme {
+  margin-block-start: var(--space-flow);
+}
+
+/*
+ * «Схема процесса» — the caption stays visible (spec §10: schemes reconstructed from a
+ * description must be labelled). --color-muted = 5.44:1, uppercase tracking to read as a
+ * label; it is also the accessible name of the list through aria-labelledby.
+ */
+.process-scheme__caption {
+  font-size: var(--step--1);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.process-scheme ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 0.6rem;
+  padding: 0;
+  list-style-position: inside;
+}
+
+/*
+ * Each step is a chip. The hairline is decoration around text that already sits at 14.03:1,
+ * so --color-rule is fine here; `flex-wrap` above means a long chain becomes several rows at
+ * 360 px rather than a horizontal scroll.
+ */
+.process-scheme li {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--color-rule);
+  border-radius: 2px;
+  font-size: var(--step--1);
+}
+
+/* --- Case cards and inline details ----------------------------------------------------------- */
+
+/*
+ * A card is a hairline box with generous padding — no fill, so no new colour enters the
+ * palette and every contrast pair inside the card is the one measured against --color-bg.
+ */
+.case-card {
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  padding: clamp(1rem, 0.55rem + 2vw, 2rem);
+}
+
+.case-card__summary {
+  font-size: var(--step-1);
+  line-height: 1.45;
+}
+
+/*
+ * The "read more" link. It stays a link (it is one: without JS it jumps to the details below,
+ * with JS it opens the case dialog), but gets a control-sized box: 44 px tall, bold,
+ * underlined — the underline is the non-colour signal base.css asks of links in text. Colour
+ * is inherited from base.css and does not change on hover: --color-accent at 7.70:1 in every
+ * state, with the hover signalled through the underline alone.
+ */
+.case-card__more {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  font-weight: 600;
+}
+
+/*
+ * The details block is separated from the card's summary by a hairline instead of being folded
+ * away: with JavaScript off it is the case description, read in place (spec §11 «Надёжность»,
+ * tests/static-fallback.spec.js).
+ */
+.case-details {
+  margin-block-start: var(--space-flow);
+  border-block-start: 1px solid var(--color-rule);
+  padding-block-start: var(--space-flow);
+}
+
+/*
+ * The only rule in the project that hides case details — nothing else may (spec §11).
+ *
+ * Two conditions, both load-bearing. `[data-js="on"]` (set by main.js on <html>) means the
+ * dialog can actually open, so the details are reachable; `.case-card` means "still at home",
+ * so the moment case-dialog.js moves the very same node into #case-dialog-body the rule stops
+ * matching and the node is visible again. A copy would need a second rule here; there is none,
+ * because there is no copy.
+ */
+[data-js="on"] .case-card [data-case-details] {
+  display: none;
+}
+
+/*
+ * Flow inside the details: layout.css's owl only reaches direct children of .case-card, so
+ * the blocks space themselves here. Each .case-details__block is one labelled fact
+ * («Проблема», «Решение», …) and reads as a paragraph of its own.
+ */
+.case-details > * + * {
+  margin-block-start: var(--space-flow);
+}
+
+/* --- Case dialog ------------------------------------------------------------------------------- */
+
+/*
+ * The panel `case-dialog.js` opens with `showModal()`. What the browser already provides and
+ * this file only paints: the top layer, the `::backdrop` pseudo-element, Escape, and the
+ * inertness of everything behind it (MDN, <dialog> and HTMLDialogElement.showModal —
+ * https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal).
+ *
+ * The one trap in styling a native dialog: a closed one is `display: none` by UA style, and the
+ * only thing that keeps it that way is that no rule here sets `display` unconditionally. Every
+ * layout declaration is therefore scoped to `.case-dialog[open]` — the attribute the browser
+ * sets on `showModal()` and removes on close. Do not lift them out of it.
+ *
+ * Widths: the dialog's containing block is the viewport, so the percentages below are viewport
+ * percentages. Wide screens get a centred column capped at 720 px (UA `margin: auto` does the
+ * centring); the cap is the same reading measure the page uses, not a new one.
+ */
+.case-dialog {
+  inline-size: min(720px, 100% - 2rem);
+  max-block-size: calc(100% - 2rem);
+  padding: clamp(1rem, 0.55rem + 2vw, 2rem);
+  border: 1px solid var(--color-rule);
+  border-radius: 3px;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/*
+ * Two rows: the title line with the close button beside it, then the case text. The body is the
+ * scroll container (`minmax(0, …)` on the second row is what allows it to shrink below its
+ * content and scroll at all), so the close button never leaves the panel however long the case
+ * description is — the requirement that matters most on a phone-sized, near-full-screen panel.
+ */
+.case-dialog[open] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-flow);
+}
+
+.case-dialog__body {
+  grid-column: 1 / -1;
+  overflow-y: auto;
+}
+
+/*
+ * The details heading, hidden while — and only while — the node is inside the dialog.
+ *
+ * The dialog is labelled by `#case-dialog-title` (aria-labelledby), which case-dialog.js fills
+ * with the originating card's `<h3>`. The moved-in `.case-details__title` says the same thing a
+ * second time, one line below it: on screen it reads as a stutter, and to a screen reader it is
+ * the accessible name repeated as the first heading of the panel.
+ *
+ * `display: none` on the copy inside the panel, not a deletion of the element: the heading is
+ * what names this block for the JavaScript-off reader and on paper, where there is no dialog and
+ * no `#case-dialog-title` — both of those paths keep the markup exactly as served. The selector
+ * is scoped to `#case-dialog-body`, so the heading comes back the moment the node goes home.
+ */
+#case-dialog-body .case-details__title {
+  display: none;
+}
+
+/* The moved-in .case-details node sits at the top of the panel body: no card above it, so the
+   hairline and the spacing it carries inside the card are dropped here. */
+.case-dialog__body > .case-details {
+  margin-block-start: 0;
+  border-block-start: 0;
+  padding-block-start: 0;
+}
+
+/*
+ * The dimmed backdrop. The colour is --color-text (#202622) at 60 %, written out rather than
+ * referenced through the token: `::backdrop` does not inherit from the originating element in
+ * every engine this project targets, so a var() here would be an invalid value in some of them
+ * and leave the backdrop transparent.
+ */
+.case-dialog::backdrop {
+  background-color: rgb(32 38 34 / 0.6);
+}
+
+/*
+ * The close button: a 44 px square control in the panel's top-right corner, aligned with the
+ * title's first line. Border in --color-accent, not --color-rule — it is what identifies the
+ * control, so it needs the 3:1 of WCAG 1.4.11 (#285547 gives 7.70:1).
+ */
+.case-dialog__close {
+  grid-column: 2;
+  grid-row: 1;
+  inline-size: 44px;
+  block-size: 44px;
+  border: 1px solid var(--color-accent);
+  border-radius: 3px;
+  background-color: transparent;
+  color: var(--color-accent);
+  font-size: var(--step-1);
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Hover inverts the same measured pair instead of introducing a colour: #F6F4EF on #285547. */
+.case-dialog__close:hover {
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/*
+ * Below 600 px the panel goes near full-screen: on a 360 px phone a centred card with margins
+ * wastes the width a long case description needs, and the reader is doing one thing only.
+ */
+@media (max-width: 600px) {
+  .case-dialog {
+    inline-size: 100%;
+    max-inline-size: 100%;
+    block-size: 100%;
+    max-block-size: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+/*
+ * Background scroll lock, set by case-dialog.js for as long as a dialog is open.
+ *
+ * Taking <body> out of flow is what actually stops the page behind the backdrop from moving
+ * (`overflow: hidden` on the scrolling element is ignored by iOS Safari). The module writes the
+ * matching `top: -<scrollY>px` inline, so the frozen page stays visually where the reader left
+ * it, and restores the offset with `window.scrollTo` on close.
+ */
+body.has-open-dialog {
+  position: fixed;
+  inset-inline: 0;
+  width: 100%;
+}
+
+/* --- Approach ---------------------------------------------------------------------------------- */
+
+/*
+ * The six steps keep the ordered-list numbering — it is the content ("одна цепочка"), not
+ * decoration. The lead-in <strong> becomes the step's title line, which makes the list
+ * scannable without adding markup or a second colour.
+ */
+#approach ol {
+  display: grid;
+  gap: var(--space-flow);
+  padding-inline-start: 1.4rem;
+}
+
+.approach__step::marker {
+  /* The numeral is part of the step's title, so it matches its weight. */
+  font-weight: 600;
+}
+
+.approach__step > strong {
+  display: block;
+}
+
+/* --- Fit ----------------------------------------------------------------------------------------- */
+
+/*
+ * Directions of interest: a plain marker list, same terracotta square as the other lists so
+ * the three marker lists on the page read as one family.
+ */
+#fit ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fit__direction {
+  position: relative;
+  padding-inline-start: 1.15rem;
+}
+
+.fit__direction::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0.62em;
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  background-color: var(--color-accent-2);
+}
+
+/* --- Contacts -------------------------------------------------------------------------------------- */
+
+/*
+ * Two links, deliberately large and tappable (spec §9): --step-1 text in a 44 px-tall box.
+ * The underline from base.css stays — these are links in running content, not buttons — and so
+ * does its colour, --color-accent at 7.70:1 in every state.
+ */
+#contacts ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.contacts__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  font-size: var(--step-1);
+}
+
+/* --- Disclaimer and footer -------------------------------------------------------------------------- */
+
+/*
+ * The «заявленные кандидатом» line, above the cases and repeated in the footer. Small and
+ * quiet, but --color-muted keeps it at 5.44:1 — it is a factual qualifier that has to stay
+ * readable, so it never goes lighter than this token.
+ */
+.disclaimer {
+  font-size: var(--step--1);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+/* The footer's name line is the quiet voice too; the layout of the band is in layout.css. */
+.site-footer p:not(.disclaimer) {
+  font-size: var(--step--1);
+  color: var(--color-muted);
+}
+
+/* --- Chapter rail link states -------------------------------------------------------------------------- */
+
+/*
+ * The rail's two shapes (a scrolling chip row below 1024 px, a vertical list along a
+ * hairline above it) are layout.css's; only the states live here.
+ *
+ * Resting links are --color-muted (5.44:1) so that the current chapter can step forward in
+ * --color-text without either state being hard to read. Hover lifts them to --color-accent
+ * (7.70:1) — a real change here, unlike on the inline links, because the resting colour is
+ * the muted one.
+ *
+ * `position: relative` is here rather than in layout.css because the only thing it
+ * positions is the `.is-current` marker below.
+ */
+.chapter-rail__link {
+  position: relative;
+  color: var(--color-muted);
+}
+
+.chapter-rail__link:hover {
+  color: var(--color-accent);
+}
+
+/*
+ * `.is-current` — set by navigation.js on the chapter being read. Two non-colour cues, as
+ * required: a heavier weight and a leading marker; the colour change to --color-text
+ * (14.03:1) only reinforces them. The marker is absolutely positioned on purpose — an
+ * inline marker would change the chip's width every time the observer switches chapters and
+ * nudge the horizontally scrolling rail on narrow screens.
+ */
+.chapter-rail__link.is-current {
+  font-weight: 600;
+  color: var(--color-text);
+  /* The chip row also takes the accent border; in the vertical rail layout.css removes the
+     border altogether, so there the weight and the marker carry the state alone. */
+  border-color: var(--color-accent);
+}
+
+.chapter-rail__link.is-current::before {
+  content: "";
+  position: absolute;
+  /* Centred on the link's own text line, inside the chip's 0.7rem inline padding. */
+  inset-block-start: 50%;
+  inset-inline-start: 0.2rem;
+  transform: translateY(-50%);
+  inline-size: 0.3rem;
+  block-size: 0.3rem;
+  background-color: var(--color-accent-2);
+}
+
+@media (min-width: 1024px) {
+  /*
+   * In the vertical rail the chips lose their padding and border (layout.css), so the marker
+   * moves out into the 0.9rem gutter between the rail's hairline and its labels.
+   */
+  .chapter-rail__link.is-current::before {
+    inset-inline-start: -0.6rem;
+  }
+}

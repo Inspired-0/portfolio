@@ -1,0 +1,168 @@
+/*
+ * print.css — the paper rendering of the portfolio (spec §11 «Печать», plan Task 9).
+ *
+ * Loaded with media="print", so not one byte of it applies on screen and none of the rules
+ * below can regress the screen layout. It is the last stylesheet in <head>, which means it
+ * wins every tie at equal specificity against base/layout/components/motion.
+ *
+ * What it REMOVES, and why each one is worthless on paper:
+ *   .site-header  — sticky navigation; on paper it would print once, at the top, as a row of
+ *                   dead anchors, and its sticky offset maths means nothing in a page box.
+ *   #chapter-rail — the chapter index; same reason, plus it is `position: sticky` inside a
+ *                   two-column grid and would otherwise reserve an empty column (see #path).
+ *   .skip-link    — a keyboard affordance, parked off-screen by a transform. There is no
+ *                   keyboard on paper, and a transformed fixed element near a page break is
+ *                   a known source of stray ink.
+ *   .hero__actions— the two in-page buttons («Пройти мой путь», «Смотреть кейсы»); they
+ *                   scroll the document, an action paper cannot perform.
+ *   #case-dialog  — the modal panel. It is empty and inert whenever nothing is open, and the
+ *                   printed document shows every case inline anyway (below), so the dialog
+ *                   has nothing to contribute. Printing *while* a dialog is open used to lose
+ *                   that one case, because case-dialog.js MOVES the details node into the panel
+ *                   instead of copying it; the module now closes an open dialog on the window's
+ *                   `beforeprint`, so the node is back in its card before this file is applied.
+ *   .case-card__more
+ *                 — the «Подробности кейса» link. It is an invitation to open the details, and
+ *                   on paper the details are already printed in full right underneath it (see
+ *                   below), so the line would only ask the reader to click a sheet of paper.
+ *
+ * Why the case details are RE-SHOWN:
+ *   On screen with JavaScript running, components.css hides every `[data-case-details]`
+ *   inside a `.case-card` because the dialog is the way to read them. Paper has no dialog and
+ *   no link to click, so that single rule is the difference between a printout with three
+ *   case descriptions and a printout with three teaser lines. Spec §11 requires the former
+ *   («раскрыть описания кейсов»), so it is overridden here — together with the dialog-only
+ *   rule that suppresses the duplicated `.case-details__title`, since on paper that heading
+ *   is the only thing naming the block.
+ *
+ * The rest is ink economy and page discipline: black on white, no backgrounds or shadows to
+ * burn toner, no transitions to catch the renderer mid-flight, contact URLs spelled out
+ * because a printed hyperlink is unusable, and no page break through the middle of a case
+ * card or a chapter takeaway.
+ */
+
+/* --- Ink reset ------------------------------------------------------------------------- */
+
+/*
+ * Black text on a white sheet, nothing painted behind it.
+ *
+ * `!important` on a universal selector is deliberate and is the only place this file uses it.
+ * The screen stylesheets set colour and background through class and id selectors, so a
+ * (0,0,0) universal rule loses every cascade contest without it — the alternative is
+ * restating a few dozen selectors here and keeping them in sync forever.
+ *
+ * Browsers print backgrounds only when the reader ticks "Background graphics", so this is
+ * belt and braces: it guarantees the same readable page whether or not that box is ticked.
+ * `transition`/`animation` are cleared for the same reason motion.css already neutralises the
+ * chapter reveal — a print snapshot must never catch an element mid-animation.
+ */
+*,
+*::before,
+*::after {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transition: none !important;
+  animation: none !important;
+  color: #000 !important;
+}
+
+/* The sheet itself. The canvas takes its background from <html>, so white is set once, here. */
+html {
+  background-color: #fff !important;
+}
+
+/* --- Removed on paper ------------------------------------------------------------------ */
+
+/*
+ * `#case-dialog` is written as an id (1,0,0) on purpose: components.css opens the panel with
+ * `.case-dialog[open] { display: grid }` (0,2,0), and an id beats it outright — no
+ * `!important` needed, and the rule keeps working if the panel is open at print time.
+ */
+.site-header,
+#chapter-rail,
+.skip-link,
+.hero__actions,
+.case-visual,
+.case-index,
+.journal-kicker,
+.case-card__more,
+#case-dialog {
+  display: none;
+}
+
+/*
+ * The link is the only content of its paragraph, so hiding it alone would leave an empty <p>
+ * between the summary and the details — its collapsed margins print as a stray gap. The
+ * paragraph goes with it. `:has()` keeps the rule tied to the link rather than to "the third
+ * child of a card"; it is Baseline-supported in the engines spec §11 lists, and a browser
+ * without it degrades to the gap above, never to a lost paragraph of text.
+ */
+.case-card p:has(> .case-card__more) {
+  display: none;
+}
+
+/*
+ * With the rail gone, #path has no reason to be a grid. From 1024 px of *page-box* width
+ * layout.css would give it a `var(--rail-width)` first column and print an empty gutter down
+ * the whole history; `display: block` drops the grid, and with it the `order` declarations
+ * that only apply to grid items. The DOM order that remains — heading, then chapters — is
+ * exactly the reading order the grid was reproducing.
+ */
+#path {
+  display: block;
+}
+
+/* --- Case details, expanded ------------------------------------------------------------ */
+
+/*
+ * Both selectors repeat the screen rule they override, at its own specificity, so the win is
+ * decided by source order (this file is last) and stays readable as an override rather than
+ * an `!important` arms race:
+ *   [data-js="on"] .case-card [data-case-details]  — components.css, the JS-on hide (0,3,0);
+ *   #case-dialog-body .case-details__title         — components.css, the in-dialog heading (1,1,0).
+ * The bare selectors beside them cover the JavaScript-off document, where nothing was hidden
+ * in the first place and `display: block` is simply the value already in force.
+ */
+[data-js="on"] .case-card [data-case-details],
+[data-case-details] {
+  display: block;
+}
+
+#case-dialog-body .case-details__title,
+.case-details__title {
+  display: block;
+}
+
+/* --- Contacts -------------------------------------------------------------------------- */
+
+/*
+ * A printed link carries no href, so the address is written after the link text. Scoped to
+ * #contacts and to external schemes: the in-page navigation (`#path`, `#cases`, …) would
+ * print as noise, and the `mailto:` contact already shows the address as its own link text.
+ * `attr()` in `content` is the long-standing string form supported everywhere (MDN, attr()).
+ *
+ * `white-space: pre-wrap` is not decoration: generated content goes through the normal
+ * white-space processing, and the leading space of the string is collapsed away against the end
+ * of the link text — measured in Chromium, the line came out as «@quidcumfacie(https://t.me/…)»
+ * with the address glued to the handle. `pre-wrap` preserves that one space while still letting
+ * the line wrap, which `pre` would not.
+ */
+#contacts a[href^="http"]::after {
+  content: " (" attr(href) ")";
+  white-space: pre-wrap;
+}
+
+/* --- Page breaks ----------------------------------------------------------------------- */
+
+/*
+ * A case card split across two sheets loses the connection between its result line and the
+ * detail blocks that explain it; a takeaway is a single sentence that should never be the
+ * orphan at the top of a page. `break-inside: avoid` is a request, not a guarantee — a block
+ * taller than one sheet still breaks, which is the correct fallback.
+ */
+.case-card,
+.chapter__takeaway {
+  break-inside: avoid;
+}

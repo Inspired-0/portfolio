@@ -1,0 +1,188 @@
+/*
+ * motion.css — the whole motion layer of the portfolio (spec §9, plan Task 8).
+ *
+ * Responsibility: the chapter reveal, the rail marker fade and the dialog's opening fade. Nothing
+ * else in the project may animate, and nothing in this file may change layout.
+ *
+ * Two animatable properties, and only these two: `opacity` and `transform` (spec §9, CLAUDE.md).
+ * They are the pair the compositor can handle without laying the page out again; width, height,
+ * top/left, margin and colour are deliberately absent. Every duration below sits inside the
+ * 180–350 ms window the spec gives, so a reader never waits for the page to finish moving.
+ * Numbers are never animated anywhere — the results in the history are printed in their final
+ * form and no count-up hides a value.
+ *
+ * The visibility contract — the reason for the scoping in every selector here
+ * -------------------------------------------------------------------------
+ * The page is fully readable before any of this applies. Every rule that makes content
+ * transparent or shifts it is scoped under `[data-motion="on"]`, an attribute that only
+ * `scripts/motion.js` sets, and only after it has confirmed that motion is allowed and that it
+ * has an IntersectionObserver to reveal things with. Therefore:
+ *   - JavaScript off, JavaScript failing to load, a module error, an old browser without
+ *     IntersectionObserver, a reader who asked for reduced motion → the attribute is absent, not
+ *     one reveal rule matches, and the page looks exactly as it is served;
+ *   - `main.js` also removes the attribute again if `initMotion()` throws midway, so a partial
+ *     start cannot strand a chapter at `opacity: 0`.
+ *
+ * Load order: last in <head>, after components.css — it modifies states components.css defines
+ * (`.chapter-rail__link.is-current`, `.case-dialog[open]`) and must win at equal specificity.
+ *
+ * Sources for the two non-obvious techniques used below (MDN):
+ *   @starting-style — "CSS transitions are by default not triggered on an element's initial style
+ *     update, or when its display type changes from none to another value. To enable first-style
+ *     transitions, @starting-style rules are needed." Baseline: newly available since August 2024.
+ *     https://developer.mozilla.org/en-US/docs/Web/CSS/@starting-style
+ *   prefers-reduced-motion — "reduce: Indicates that a user has enabled the setting on their
+ *     device for reduced motion."
+ *     https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion
+ */
+
+/* --- Chapter reveal ----------------------------------------------------------------------- */
+
+/*
+ * Each `.chapter` fades and rises into place once, when it first enters the viewport;
+ * `scripts/motion.js` adds `.is-inview` and then stops observing it, so the class is never taken
+ * away and a chapter scrolled past never fades out again. Nothing here is driven per scroll
+ * frame: the browser runs one transition per chapter and the observer sleeps in between.
+ *
+ * 12 px of travel is a nudge, not a slide — short enough that the text is legible the whole way
+ * and that a mid-transition reading position is never wrong by a line. 260 ms is the middle of
+ * the permitted window; `ease-out` spends most of it near the final position.
+ *
+ * The `transition` sits on the revealed state, not on the hidden one, and that placement is
+ * load-bearing. `motion.js` sets `data-motion="on"` on an already-styled document, so the hidden
+ * rule arrives as a style change: with the transition declared there, all six chapters would
+ * animate *out* from opacity 1 over 260 ms at load (measured: 0.79 on every chapter one frame in)
+ * and a chapter already on screen — after a deep link such as /#chapter-urfu — would visibly fade
+ * away and back. Declared here instead, the hide is instantaneous and only the reveal animates:
+ * a transition is started from the after-change style, which is the one carrying the class.
+ */
+[data-motion="on"] .chapter {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+[data-motion="on"] .chapter.is-inview {
+  opacity: 1;
+  /* `none`, not `translateY(0)`: it also drops the containing block a transform establishes. */
+  transform: none;
+  transition: opacity 260ms ease-out, transform 260ms ease-out;
+}
+
+/*
+ * Print guard, in the file that creates the risk rather than in print.css.
+ *
+ * Printing re-renders the document at paper size, and a chapter the reader never scrolled to has
+ * no `.is-inview` — it would come out of the printer blank. Spec §11 «Печать» asks for decorative
+ * movement to be dropped and the text kept readable; this is the minimum that guarantees it, and
+ * print.css (Task 9) is free to add to it.
+ */
+@media print {
+  [data-motion="on"] .chapter,
+  [data-motion="on"] .chapter.is-inview {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* --- Rail marker -------------------------------------------------------------------------- */
+
+/*
+ * The history rail's current-chapter marker fades in instead of blinking on.
+ *
+ * The marker is `.chapter-rail__link.is-current::before` (components.css owns its geometry and
+ * colour — none of it is repeated here). That pseudo-element only exists while the class is on the
+ * link, so it is *newly rendered* every time the observer moves the mark, and a plain transition
+ * would have no earlier value to start from. `@starting-style` supplies that value; this is the
+ * whole reason it appears here.
+ *
+ * Deliberately one-directional: the outgoing marker disappears at once, because an exit
+ * transition would need `transition-behavior: allow-discrete` and would briefly show two markers
+ * — two chapters looking current is worse than a marker that simply moves.
+ *
+ * The rest of the current state (heavier weight, darker text, accent border) is not transitioned:
+ * those are colour and font properties, and this file animates opacity and transform only.
+ *
+ * Browsers older than the August 2024 baseline ignore `@starting-style` as an unknown at-rule and
+ * show the marker immediately — the state is identical, only the 180 ms of fade is missing.
+ */
+[data-motion="on"] .chapter-rail__link.is-current::before {
+  transition: opacity 180ms ease-out;
+}
+
+@starting-style {
+  [data-motion="on"] .chapter-rail__link.is-current::before {
+    opacity: 0;
+  }
+}
+
+/* --- Case dialog -------------------------------------------------------------------------- */
+
+/*
+ * The dialog fades in with its backdrop. Opening only — see the decision below.
+ *
+ * A `<dialog>` is `display: none` until `showModal()`, and a transition does not run on the
+ * none → block change by itself (MDN, @starting-style). Two routes exist:
+ *   1. the full entry+exit treatment: `transition-behavior: allow-discrete` on `display` plus
+ *      `overlay`, which keeps the panel in the top layer until the exit animation ends;
+ *   2. entry only, via `@starting-style`, letting the close stay instant.
+ * This file takes route 2, on purpose. `case-dialog.js` restores the reader's scroll position
+ * synchronously inside the close handler (the background is `position: fixed` while a dialog is
+ * open), so a deferred close would show the page jumping back behind a still-visible panel. An
+ * instant close is also what the reader asked for by pressing Escape or the close button.
+ *
+ * Consequences, stated so nobody "fixes" them later:
+ *   - no `display`/`overlay` in the transition list → the panel disappears the moment the browser
+ *     removes `[open]`, exactly as it does with motion off;
+ *   - nothing is ever left at `opacity: 0`: the starting value lives inside `@starting-style`, so
+ *     a browser that does not support the at-rule simply paints the open dialog at full opacity.
+ */
+[data-motion="on"] .case-dialog[open] {
+  opacity: 1;
+  transition: opacity 220ms ease-out;
+}
+
+/*
+ * The backdrop fades with the panel. It is the dialog's own pseudo-element and appears together
+ * with it, so it needs the same starting value; the duration is shared to keep the two in step.
+ */
+[data-motion="on"] .case-dialog[open]::backdrop {
+  opacity: 1;
+  transition: opacity 220ms ease-out;
+}
+
+@starting-style {
+  [data-motion="on"] .case-dialog[open],
+  [data-motion="on"] .case-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* --- Reduced motion ----------------------------------------------------------------------- */
+
+/*
+ * Belt and braces, last in the file so it wins at equal specificity (MDN's own guidance for this
+ * media feature: the reduced-motion rules come later in source order).
+ *
+ * `motion.js` reads the preference once, at startup, and never sets `data-motion` for a reader
+ * who has it on — so in the normal case none of the selectors below can even match. This block is
+ * for the reader who turns the setting on *after* the page has loaded: the media query re-
+ * evaluates immediately, while the attribute stays where it is. Everything then stops moving and,
+ * more importantly, every chapter is opaque whether or not the observer ever reached it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-motion="on"] .chapter,
+  [data-motion="on"] .chapter.is-inview {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    animation: none;
+  }
+
+  [data-motion="on"] .chapter-rail__link.is-current::before,
+  [data-motion="on"] .case-dialog[open],
+  [data-motion="on"] .case-dialog[open]::backdrop {
+    transition: none;
+    animation: none;
+  }
+}

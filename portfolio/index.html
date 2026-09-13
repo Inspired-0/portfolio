@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<!--
+  Vladimir Tarasenko — portfolio, single static page (spec docs/portfolio-spec.md, stage 1).
+
+  Document structure (top to bottom):
+    a.skip-link          — first body child, jumps to #main
+    header#site-header   — name link to #top + nav.site-nav with four section links
+    main#main
+      section#intro      — hero (the only h1) + «Быстрое знакомство» quick facts
+      section#path       — nav#chapter-rail + six article.chapter elements, chronological
+      section#cases      — three article.case-card elements, each with inline .case-details
+      section#approach   — «Как я работаю», ordered list of .approach__step
+      section#fit        — «Почему мне интересна Goulash.Tech» + .fit__direction list
+      section#contacts   — exactly two links: Telegram and email
+    footer.site-footer   — name and the results disclaimer
+    dialog#case-dialog   — empty modal panel, last body child before the script tag
+
+  DOM contract consumed by the later CSS/JS tasks (names are fixed, do not rename):
+    ids       — main, site-header, intro, path, cases, approach, fit, contacts,
+                chapter-prologue, chapter-kodologia, chapter-urfu, chapter-artsofte,
+                chapter-pressindex, chapter-restaff, chapter-rail,
+                case-restaff-screening(-details), case-restaff-meetings(-details),
+                case-pressindex-pipeline(-details), case-dialog(-title, -body);
+                every id on the page is unique — including while the dialog is open, because
+                scripts/case-dialog.js MOVES a .case-details node into #case-dialog-body and
+                puts it back on close, never copies it (spec §10)
+    hooks     — [data-chapter] on each .chapter (short rail label),
+                #chapter-rail[data-chapter-rail] with a.chapter-rail__link[data-chapter-link],
+                a.case-card__more[data-case-link] whose href is the matching
+                div.case-details[data-case-details] id inside the same .case-card,
+                [data-dialog-close] on the dialog's close button
+    headings  — one h1 (hero), h2 per section, h3 per chapter and per case card
+    focus     — main#main carries tabindex="-1": it is the skip link's target and is focused
+                programmatically only, never reached by Tab. Focus inside the open dialog is
+                the browser's job (showModal), not the page's
+
+  Head links, in order: four rel="preload" font hints, then assets/fonts/fonts.css (local
+  @font-face), styles/base.css (tokens and base typography), styles/layout.css (page shell),
+  styles/components.css (block surfaces), styles/motion.css (the reveal and transition layer,
+  gated on [data-motion="on"]) and styles/print.css (media="print", the paper rendering).
+  The module entry point scripts/main.js is loaded at the end of <body>.
+  Public copy is Russian and comes from the spec and the résumé only.
+-->
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Search and tab metadata. The title names the person and the role focus and stays inside the
+    ~60 characters a result listing shows before truncating; the description is the spec §3
+    subtitle verbatim (162 characters, inside the 140-170 window listings use) — the public copy
+    rule forbids inventing a second, diverging version of that sentence here.
+  -->
+  <title>Владимир Тарасенко — AI-автоматизация и продуктовый опыт</title>
+  <meta name="description" content="Я Владимир Тарасенко. Разбираюсь в бизнес-процессах, нахожу возможности для улучшения и довожу решения до результата — через аналитику, управление продуктом и ИИ.">
+
+  <!--
+    Open Graph, for the preview card a messenger or social site builds from a shared link.
+    Property names and values follow the specification at https://ogp.me/:
+      og:type      — "The type of your object"; `website` is the generic page type, which is what
+                     a single static page is. (`profile` exists, but it pulls in the
+                     profile:first_name / :last_name / :username family and describes a person's
+                     profile page rather than a portfolio — not worth the extra tags here.)
+      og:title     — "The title of your object as it should appear within the graph".
+      og:description — "A one to two sentence description of your object"; same sentence as the
+                     meta description above, on purpose.
+      og:locale    — "Of the format language_TERRITORY. Default is en_US" → ru_RU, since every
+                     word of the page is Russian and the default would mislabel it.
+      og:site_name — "the name which should be displayed for the overall site".
+
+    DELIBERATELY ABSENT until publish time, because all of them need the final public URL, which
+    is not chosen yet (spec §10 «Размещение», CLAUDE.md): <link rel="canonical">, og:url,
+    og:image (plus its og:image:alt / :width / :height) and the whole twitter:* family, which is
+    only worth adding alongside a real preview image. They are tracked in the «Перед публикацией»
+    table of docs/portfolio-content-checklist.md — do not add a placeholder value for any of them,
+    a wrong canonical or a 404 image is worse than none.
+  -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Владимир Тарасенко — AI-автоматизация и продуктовый опыт">
+  <meta property="og:description" content="Я Владимир Тарасенко. Разбираюсь в бизнес-процессах, нахожу возможности для улучшения и довожу решения до результата — через аналитику, управление продуктом и ИИ.">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:site_name" content="Портфолио Владимира Тарасенко">
+
+  <!--
+    Tab icon. A single scalable SVG replaces the usual .ico/.png set; `type` lets a browser that
+    cannot render SVG icons skip the request instead of downloading a file it will not paint.
+    Declaring it also stops the automatic root lookup MDN describes: "browsers automatically
+    request /favicon.ico from the root of a site" — an unwanted 404 on every cold visit.
+    Source: https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/link
+  -->
+  <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
+
+  <!--
+    Font preloads — the four upright families the page actually renders in, fetched in parallel
+    with the stylesheets instead of after them.
+
+    Without this the browser only learns a font is needed after fonts.css has arrived, parsed and
+    matched a @font-face against laid-out text: a cold deep link (…/#chapter-urfu) therefore paints
+    the fallback stack first and reflows when the real metrics land, right where the reader is
+    looking. Preloading starts those four requests in the first round trip and removes that shift.
+
+    `crossorigin` is present although the files sit in this very folder — MDN: "The attribute needs
+    to be set to match the resource's CORS and credentials mode, even when the fetch is not
+    cross-origin", because fonts "have to be fetched using anonymous-mode CORS". Omitting it makes
+    the browser download each file a second time for the @font-face rule and warns in the console.
+    Source: https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preload
+
+    Both subsets of both families are listed because the page mixes them in the same paragraph
+    (Russian prose with «AI Generalist», «Python, SQL, API», «Goulash.Tech»). These four are
+    also all the font files there are: nothing on the page renders an italic face, so no italic
+    subset is downloaded (tools/fetch_fonts.py no longer requests one).
+  -->
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="assets/fonts/inter-400-600-latin.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="assets/fonts/inter-400-600-cyrillic.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="assets/fonts/playfair-display-400-700-latin.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="assets/fonts/playfair-display-400-700-cyrillic.woff2">
+
+  <!-- Local @font-face declarations first: base.css references the families they declare. -->
+  <link rel="stylesheet" href="assets/fonts/fonts.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <!-- Page shell after the tokens: layout.css consumes the :root variables base.css declares. -->
+  <link rel="stylesheet" href="styles/layout.css">
+  <!-- Component surfaces last: components.css overrides shell rules where a block needs it. -->
+  <link rel="stylesheet" href="styles/components.css">
+  <!-- Motion last: every rule in it is scoped under [data-motion="on"] (set by scripts/motion.js
+       only when motion is allowed), and it refines states components.css defines. -->
+  <link rel="stylesheet" href="styles/motion.css">
+  <link rel="stylesheet" href="styles/journal.css">
+  <!-- Paper only. media="print" keeps it out of the screen cascade entirely, and being last
+       lets it override the screen rules it has to undo (see the header comment in the file). -->
+  <link rel="stylesheet" href="styles/print.css" media="print">
+</head>
+<body>
+  <!-- Keyboard bypass link: first focusable element on the page. -->
+  <a class="skip-link" href="#main">Перейти к содержанию</a>
+
+  <!-- Site header: name returns to the top of the document, nav links to the four main sections. -->
+  <header class="site-header" id="site-header">
+    <!-- Two renderings of one name: the full one, and initials that free enough room for all
+         four nav links below 480 px (layout.css switches between them; exactly one is ever
+         displayed). The accessible name comes from aria-label, so it stays «Владимир Тарасенко»
+         at every width: the hidden variant is display:none, i.e. out of the accessibility tree,
+         and the initials are aria-hidden, so without the label the link would announce itself as
+         «ВТ» on a phone. aria-label was chosen over a visually-hidden full span because the
+         latter needs a new utility class and would leave both texts in the tree. Trade-off: below
+         480 px the visible text («ВТ») is an abbreviation of the accessible name rather than a
+         substring of it (WCAG 2.5.3 Label in Name) — accepted for a home link whose name is the
+         site's own title. -->
+    <a class="site-header__name" href="#top" aria-label="Владимир Тарасенко"><span class="site-header__name-full">Владимир Тарасенко</span><span class="site-header__name-short" aria-hidden="true">ВТ</span></a>
+    <nav class="site-nav" aria-label="Основные разделы">
+      <a class="site-nav__link" href="#path">Путь</a>
+      <a class="site-nav__link" href="#cases">Кейсы</a>
+      <a class="site-nav__link" href="#approach">Подход</a>
+      <a class="site-nav__link" href="#contacts">Контакты</a>
+    </nav>
+  </header>
+
+  <!-- tabindex="-1" makes the skip-link target programmatically focusable without adding it to the Tab order. -->
+  <main id="main" tabindex="-1">
+    <!-- Section 1: hero (the only h1) and the «Быстрое знакомство» quick facts. -->
+    <section id="intro" aria-labelledby="intro-title">
+      <div class="journal-kicker"><span>Личный журнал</span><span>Продукты, люди и технологии</span></div>
+      <div class="hero-spread">
+        <h1 class="hero__title" id="intro-title"><span>От кода —</span> <span>к продуктам</span> <span>и <em>AI-автоматизации</em></span></h1>
+        <aside class="hero-note" aria-label="Об авторе">
+          <p>Программирование научило меня создавать. Преподавание - объяснять. Продуктовая работа - доводить идеи до результата.</p>
+        </aside>
+      </div>
+      <div class="hero-bottom">
+        <p class="hero__subtitle">Разбираюсь в бизнес-процессах, нахожу возможности для улучшения и довожу решения до результата через аналитику, продуктовый взгляд и ИИ.</p>
+        <div class="hero__actions">
+          <a class="button button--primary" href="#path">Пройти мой путь ↓</a>
+          <a class="button button--ghost" href="#cases">Смотреть кейсы ↗</a>
+        </div>
+      </div>
+      <p class="hero__tagline">AI-автоматизация · продуктовый опыт · Python, SQL, API</p>
+      <ul class="quick-facts" aria-label="Результаты из практики">
+        <li class="quick-facts__item"><strong>2 ч → 15–30 мин</strong><span>ReStaff / первичный разбор откликов</span></li>
+        <li class="quick-facts__item"><strong>25–40 → 10–15 мин</strong><span>Pressindex / обработка одного объекта</span></li>
+        <li class="quick-facts__item"><strong>55% → 70%</strong><span>Pressindex / CSAT сервиса рассылок</span></li>
+      </ul>
+    </section>
+
+    <!-- Section 2: the history. The chapter rail is the first child; chapters follow in chronological order. -->
+    <section id="path" aria-labelledby="path-title">
+      <nav class="chapter-rail" id="chapter-rail" data-chapter-rail aria-label="Главы истории">
+        <ol class="chapter-rail__list">
+          <li><a class="chapter-rail__link" data-chapter-link href="#chapter-prologue">Пролог</a></li>
+          <li><a class="chapter-rail__link" data-chapter-link href="#chapter-kodologia">Кодология</a></li>
+          <li><a class="chapter-rail__link" data-chapter-link href="#chapter-urfu">УрФУ</a></li>
+          <li><a class="chapter-rail__link" data-chapter-link href="#chapter-artsofte">Artsofte</a></li>
+          <li><a class="chapter-rail__link" data-chapter-link href="#chapter-pressindex">Pressindex</a></li>
+          <li><a class="chapter-rail__link" data-chapter-link href="#chapter-restaff">ReStaff</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="path-title">Мой путь</h2>
+
+      <!-- Chapter: school and first teaching. No calendar dates — they are not confirmed. -->
+      <article class="chapter" id="chapter-prologue" data-chapter="Пролог">
+        <p class="chapter__number">Пролог / Начало пути</p>
+        <h3 class="chapter__title">Программист и тьютор для детей</h3>
+        <p class="chapter__meta">Школа и первые занятия · последний школьный год</p>
+        <p class="chapter__lead">Я начал программировать ещё в школе. На последнем школьном году стал преподавать программирование в очной секции. Мне нравилось разбираться в том, как всё устроено, и помогать другим проходить этот путь: объяснять сложное, находить понятные примеры и видеть, как у человека начинает получаться.</p>
+        <div class="chapter__body">
+        </div>
+      </article>
+
+      <!-- Chapter: Kodologiya, the move into business analysis. -->
+      <article class="chapter" id="chapter-kodologia" data-chapter="Кодология">
+        <p class="chapter__number">Глава 01 / Понимать бизнес</p>
+        <h3 class="chapter__title">Работа с бизнесом</h3>
+        <p class="chapter__meta">Октябрь 2022 — июнь 2024 · бизнес-аналитик</p>
+        <p class="chapter__lead">В Кодологии появилась возможность перейти в бизнес-анализ. Я стал смотреть шире отдельного занятия, смотрел как человек выбирает обучение, что помогает ему остаться и где мы теряем интерес или доверие. Здесь смог проявить себя как аналитик и дать волю творчеству, искал новые форматы и улучшал сам образовательный продукт.</p>
+        <div class="chapter__body">
+          <p>Что делал: анализ воронки и удержания в Excel, интервью с учениками и родителями, CJM и пользовательский путь, гипотезы по программам и формату обучения.</p>
+        </div>
+        <ul class="results">
+          <li class="results__item">Онлайн-направление с нуля: 14% выручки за первый год.</li>
+          <li class="results__item">Конверсия вводного урока в покупку выросла до 82%.</li>
+          <li class="results__item">Средний срок жизни клиента вырос до 1,5 лет.</li>
+        </ul>
+        <p class="chapter__takeaway">Итог: начал работать в аналиткие и смотреть как развивать и делать продукты.</p>
+      </article>
+
+      <!-- Chapter: university, shown as a parallel line. Year from the résumé only, no admission date. -->
+      <article class="chapter" id="chapter-urfu" data-chapter="УрФУ">
+        <p class="chapter__number">На полях / Техническая основа</p>
+        <h3 class="chapter__title">Параллельная линия: УрФУ и командные проекты</h3>
+        <p class="chapter__meta">УрФУ, ИРИТ-РТФ, «Информатика и вычислительная техника», 2026</p>
+        <p class="chapter__lead">Параллельно я учился на программиста. В командных проектах постепенно понял, что сильнее всего меня увлекает создание концепции: для кого мы делаем продукт, как он должен работать и как команде прийти к результату. Я мог писать код, при этом особенно интересно было соединять технические возможности, аналитику и организацию работы.</p>
+        <div class="chapter__body">
+          <p>Тогда же начал пробовать ИИ в проектах: использовал Midjourney на раннем этапе его появления и AI-инструменты для помощи в написании кода. Меня интересовало, как быстрее проверять идеи и превращать их в работающий результат.</p>
+        </div>
+        <p class="chapter__takeaway">Итог: понял что создание продуктов и концепций интереснее обычного написания кода.</p>
+      </article>
+
+      <!-- Chapter: Artsofte, complex products and responsibility for delivery. -->
+      <article class="chapter" id="chapter-artsofte" data-chapter="Artsofte">
+        <p class="chapter__number">Глава 02 / Доводить до внедрения</p>
+        <h3 class="chapter__title">Artsofte: сложные продукты и ответственность за внедрение</h3>
+        <p class="chapter__meta">Февраль 2024 — март 2025 · менеджер продукта · Abanking, банковские приложения, внедрение цифрового рубля</p>
+        <p class="chapter__lead">В Artsofte я пришёл за более сложными задачами и возможностью развивать продуктовые навыки. На проекте внедрения цифрового рубля работал на стыке бизнеса и технологий: согласовывал требования, прорабатывал сценарии и интеграции, организовывал работу команды и считал экономику проекта.</p>
+        <div class="chapter__body">
+          <p>Что делал: вёл проект от presale до оплаты, участвовал в переговорах с банками, согласовывал требования, работал по Scrum с бэклогом, прорабатывал пользовательские сценарии и интеграции через REST API, моделировал процессы в BPMN и UML, готовил ТЗ и критерии приёмки, считал PnL и сметы.</p>
+        </div>
+        <ul class="results">
+          <li class="results__item">Рентабельность проекта выросла на 10% после перепроектирования ключевых процессов внедрения.</li>
+          <li class="results__item">Требования пересогласованы после смены регуляторных условий, работы доведены до оплаты.</li>
+        </ul>
+        <div class="chapter__body">
+          <p>После завершения внедрения обсуждалось развитие отдельного продукта на базе цифрового рубля. Это направление не получило продолжения, и я стал искать следующую задачу, где смогу влиять на развитие продукта.</p>
+        </div>
+        <p class="chapter__takeaway">Итог: получил серьезный финтех опыт, понял как процессы работают на самом деле, как управлять большими командами и брать ответственность.</p>
+      </article>
+
+      <!-- Chapter: Pressindex, product work meeting data and AI. -->
+      <article class="chapter" id="chapter-pressindex" data-chapter="Pressindex">
+        <p class="chapter__number">Глава 03 / Продукт и данные</p>
+        <h3 class="chapter__title">Pressindex: продукт, данные и ИИ в ежедневной работе</h3>
+        <p class="chapter__meta">Апрель 2025 — настоящее время · менеджер продукта · B2B SaaS, мониторинг медиа и соцсетей, NLP и аналитические дашборды</p>
+        <p class="chapter__lead">В Pressindex я отвечаю за развитие продукта и работаю с командой из четырёх разработчиков и дизайнера. Веду задачи от обратной связи и гипотез до релиза и оценки результата. Здесь продуктовая работа всё теснее соединилась с данными и ИИ: от анализа ТВ-эфиров до ускорения обработки медиаданных и автоматизации работы команды.</p>
+        <div class="chapter__body">
+          <p>Что делаю: roadmap и приоритеты, user stories и критерии приёмки, E2E- и UAT-приёмка, продуктовые метрики и A/B-тесты. Python, SQL и Grafana — для отчётов о техническом состоянии системы и SLA. Также делаю наброски архитектуры фич или mvp</p>
+        </div>
+        <ul class="results">
+          <li class="results__item">Запуск AI-сервиса анализа ТВ-эфиров.</li>
+          <li class="results__item">CSAT сервиса рассылок: 55% → 70%.</li>
+          <li class="results__item">Автоматизация разбора обращений и постановки задач, SLA реакции — 5 минут.</li>
+          <li class="results__item">LLM-пайплайн обработки медиаданных: 25–40 → 10–15 минут на объект.</li>
+          <li class="results__item">Внедрение AI-агентов в разработку: багфиксы вдвое быстрее, количество закрытых story в месяц выросло на 30%.</li>
+        </ul>
+      </article>
+
+      <!-- Chapter: ReStaff, a parallel project alongside Pressindex. -->
+      <article class="chapter" id="chapter-restaff" data-chapter="ReStaff">
+        <p class="chapter__number">Параллельный проект / AI Engineer</p>
+        <h3 class="chapter__title">ReStaff: практическая AI-автоматизация</h3>
+        <p class="chapter__meta">Июнь 2026 — настоящее время · AI Engineer, проектная работа · параллельный проект</p>
+        <p class="chapter__lead">В проектной работе с ReStaff я занимался внедрением AI в бизнес процессы: проектировал пайплайны и интеграции, определял критерии качества и сравнивал версии решений. Писал фичи и вел их от сбора требований до конечной реализации и сдачи заказчику. Для аналитики продаж самостоятельно собрал дашборд в DataLens, писал SQL запросы, делал RAG для агентов.</p>
+        <div class="chapter__body">
+          <p>Интеграции агентов: Google Sheets, база данных, транскрибация встреч и AmoCRM через API.</p>
+          <p>Сравнивал версии агента на одном наборе из 300 демо-встреч отдела продаж и принимал решения о доработке по чек-листу.</p>
+        </div>
+        <ul class="results">
+          <li class="results__item">Первичный разбор откликов сократился с 2 часов до 15–30 минут.</li>
+          <li class="results__item">Запущен автоматический разбор демо-встреч отдела продаж.</li>
+        </ul>
+        <p class="chapter__takeaway">Итог: развил дальше навыки программирования и перешел на агентский подход с кастомным харнесом для работы.</p>
+      </article>
+    </section>
+
+    <!-- Section 3: professional cases and public GitHub projects, with in-document details. -->
+    <section id="cases" aria-labelledby="cases-title">
+      <p class="section-label">02 / Практика</p>
+      <h2 id="cases-title">Идеи, ставшие проектами</h2>
+      <p class="section-intro">Автоматизация рабочих процессов, качество ИИ и собственные инструменты. В каждом проекте — задача, решение и то, что можно изучить подробнее.</p>
+      <nav class="case-index" aria-label="Навигация по кейсам"><a href="#case-restaff-screening">Практика в командах ↓</a><a href="#case-socialbot">Проекты из GitHub ↓</a></nav>
+      <p class="disclaimer">Числовые результаты — по резюме. Описания GitHub-проектов — по публичным материалам автора; демонстрационные версии отмечены отдельно.</p>
+
+      <!-- Case 1: ReStaff screening agent, with the reconstructed process scheme. -->
+      <article class="case-card" id="case-restaff-screening">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 01</span><span class="case-visual__main">2 часа<br>↓<br>15–30 минут</span><span class="case-visual__caption">Меньше ручной работы</span></div>
+        <p class="case-card__category">ReStaff / Автоматизация найма</p>
+        <h3 class="case-card__title">ReStaff: первичный скрининг откликов</h3>
+        <p class="case-card__summary">Агентский первичный разбор откликов вместо ручного чтения: 2 часа → 15–30 минут.</p>
+        <p><a class="case-card__more" data-case-link href="#case-restaff-screening-details">Подробности кейса</a></p>
+
+        <div class="case-details" data-case-details id="case-restaff-screening-details">
+          <h4 class="case-details__title">ReStaff: первичный скрининг откликов — подробности</h4>
+          <div class="case-details__block">
+            <p><strong>Компания, период и контекст.</strong> ReStaff, июнь 2026 — настоящее время, AI Engineer, проектная работа. B2B fintech: автоматизация выплат самозанятым и ИП, AI-агенты для найма и продаж.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Проблема.</strong> Первичный разбор откликов занимал 2 часа ручной работы.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Роль и работа.</strong> Проектировал и реализовывал пайплайн и интеграции, запустил агентский первичный скрининг, защищал выводы и решения перед стейкхолдерами.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Решение.</strong> Отклик проходит агентский разбор, рекрутёр получает готовый результат разбора и принимает решение.</p>
+            <div class="process-scheme">
+              <p class="process-scheme__caption" id="scheme-screening-caption">Схема процесса</p>
+              <ol aria-labelledby="scheme-screening-caption">
+                <li>Отклик</li>
+                <li>Агентский разбор</li>
+                <li>Результат разбора</li>
+                <li>Решение рекрутёра</li>
+              </ol>
+            </div>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Инструменты.</strong> Агентский пайплайн и интеграции через API. В проекте это Hh и работа с провадерами LLM API.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Результат.</strong> Время первичного разбора откликов сократилось с 2 часов до 15–30 минут.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Артефакт.</strong> Веб сервис для работы с откликами hh.ru</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- Case 2: ReStaff meeting-analysis agent and its quality evaluation. -->
+      <article class="case-card" id="case-restaff-meetings">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 02</span><span class="case-visual__main">300 встреч.<br>Один набор<br>для сравнения.</span><span class="case-visual__caption">Качество, которое можно проверить</span></div>
+        <p class="case-card__category">ReStaff / Оценка AI-агента</p>
+        <h3 class="case-card__title">ReStaff: разбор демо-встреч и оценка агента</h3>
+        <p class="case-card__summary">Автоматический разбор демо-встреч отдела продаж.</p>
+        <p><a class="case-card__more" data-case-link href="#case-restaff-meetings-details">Подробности кейса</a></p>
+
+        <div class="case-details" data-case-details id="case-restaff-meetings-details">
+          <h4 class="case-details__title">ReStaff: разбор демо-встреч и оценка агента — подробности</h4>
+          <div class="case-details__block">
+            <p><strong>Компания, период и контекст.</strong> ReStaff, июнь 2026 — настоящее время, AI Engineer, проектная работа. Отдел продаж проводит демо-встречи, их разбор нужен команде для аналитки работы продаж и поиска инсайтов с встреч.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Проблема.</strong> Разбор демо-встреч требовал ручной работы, с помощью агентской системы это автоматизировали и смогли получать инсайты со встреч.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Роль и работа.</strong> Спроектировал агента который проводил оценку встреч по критериям и фиксировал материалы встреч, также сформировал скилы и правила работы для агента и подключил его к корп мессенджеру.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Решение.</strong> Автоматический разбор демо-встреч отдела продаж и оценка версий агента на одном и том же наборе встреч по чек-листу.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Инструменты.</strong> Транскрибация встреч, AmoCRM, Google Sheets и база данных, API LLM провадеров .</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Результат.</strong> Запущен автоматический разбор демо-встреч отдела продаж и аналитики самих встреч. Версии агента сравнивались на фиксированном наборе из 300 демо-встреч, взаимодействие с агентом строится через мессенджер, а также через агнета идет управление сервисом.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Артефакт.</strong> Агент и дашборд с данными встреч продаж и оценкой менеджеров.</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- Case 3: Pressindex media-processing pipeline speed-up. -->
+      <article class="case-card" id="case-pressindex-pipeline">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 03</span><span class="case-visual__main">25–40<br>↓<br>10–15 минут</span><span class="case-visual__caption">Время обработки одного объекта</span></div>
+        <p class="case-card__category">Pressindex / AI-процесс</p>
+        <h3 class="case-card__title">Pressindex: ускорение обработки медиаданных</h3>
+        <p class="case-card__summary">Улучшение работающего LLM-пайплайна: 25–40 → 10–15 минут на объект.</p>
+        <p><a class="case-card__more" data-case-link href="#case-pressindex-pipeline-details">Подробности кейса</a></p>
+
+        <div class="case-details" data-case-details id="case-pressindex-pipeline-details">
+          <h4 class="case-details__title">Pressindex: ускорение обработки медиаданных — подробности</h4>
+          <div class="case-details__block">
+            <p><strong>Компания, период и контекст.</strong> Pressindex, апрель 2025 — настоящее время, менеджер продукта. B2B SaaS: мониторинг медиаполя и соцсетей, NLP-обработка, тональность и аналитические дашборды.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Проблема.</strong> LLM-пайплайн обрабатывал один объект 25–40 минут.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Роль и работа команды.</strong> Продуктовая роль: вёл задачу от гипотезы до релиза и оценки результата, расставлял приоритеты и принимал результат. Разработку вела команда из четырёх разработчиков и дизайнера.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Решение.</strong> Улучшение уже работающего LLM-пайплайна обработки медиаданных.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Инструменты.</strong> Python и SQL для работы с данными, Grafana — отчёты о техническом состоянии системы и SLA.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Результат.</strong> Время обработки одного объекта сократилось с 25–40 до 10–15 минут.</p>
+          </div>
+          <div class="case-details__block">
+            <p><strong>Артефакт.</strong> Текстовое описание кейса.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="case-card" id="case-socialbot">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 04</span><span class="case-visual__main">Прочитать.<br>Подготовить.<br>Подтвердить.</span><span class="case-visual__caption">Действие остаётся под контролем человека</span></div>
+        <p class="case-card__category">Агент / Автоматизация в браузере</p>
+        <h3 class="case-card__title">SocialBot</h3>
+        <p class="case-card__summary">Агент для повторяющихся действий в социальных сетях: читает сообщения, готовит ответ и запрашивает подтверждение перед отправкой.</p>
+        <p class="case-card__stack">Python · Playwright · LLM API</p>
+        <p><a class="case-card__more" data-case-link href="#case-socialbot-details">Подробности проекта ↗</a></p>
+        <div class="case-details" data-case-details id="case-socialbot-details">
+          <h4 class="case-details__title">SocialBot — подробности</h4>
+          <p><strong>Задача.</strong> Сократить повторяющиеся действия в браузере, сохранив контроль пользователя над отправкой сообщений и выбором аккаунта.</p>
+          <p><strong>Решение.</strong> Модель выбирает действие из разрешённого набора. Перед выполнением система проверяет доступ, лимиты и необходимость подтверждения. Повторяемые сценарии могут работать без нового обращения к модели.</p>
+          <div class="process-scheme"><p class="process-scheme__caption" id="scheme-socialbot">Схема процесса</p><ol aria-labelledby="scheme-socialbot"><li>Задача</li><li>Предложенное действие</li><li>Проверка и подтверждение</li><li>Выполнение</li></ol></div>
+          <p><strong>Результат.</strong> Реализованы подтверждение отправки, отдельное состояние аккаунтов, ограничения действий и защита планировщика от повторного запуска задачи. Численный эффект в публичном описании не заявлен.</p>
+          <p><strong>Инструменты.</strong> Python · Playwright · LLM API.</p>
+          <p><strong>Формат проекта.</strong> Код закрыт. Доступен публичный разбор процесса и проверок.</p>
+          <p><a href="https://github.com/Inspired-0/Inspired-0/blob/main/case-studies/socialbot.md">Читать разбор на GitHub ↗</a></p>
+        </div>
+      </article>
+
+      <article class="case-card" id="case-demo-analysis">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 05</span><span class="case-visual__main">От разговора<br>к проверяемому<br>выводу.</span><span class="case-visual__caption">Встречи → данные → инсайты</span></div>
+        <p class="case-card__category">Аналитика / Работа со встречами</p>
+        <h3 class="case-card__title">DemoAnalysis</h3>
+        <p class="case-card__summary">Собирает записи встреч, проверяет оценки и цитаты модели, сохраняет результат в рабочую таблицу. Агент в Mattermost помогает исследовать данные.</p>
+        <p class="case-card__stack">Python · SQL · Pydantic · Mattermost · LLM API · pytest</p>
+        <p><a class="case-card__more" data-case-link href="#case-demo-analysis-details">Подробности проекта ↗</a></p>
+        <div class="case-details" data-case-details id="case-demo-analysis-details">
+          <h4 class="case-details__title">DemoAnalysis — подробности</h4>
+          <p><strong>Задача.</strong> Превратить архив встреч из Mymeet и Circleback в данные о вопросах клиентов и работе команды продаж.</p>
+          <p><strong>Решение.</strong> Пайплайн объединяет источники, удаляет дубли, получает оценку модели и проверяет схему ответа и цитаты по расшифровке. Состояние этапов хранится в SQL; результат публикуется в Google Sheets.</p>
+          <div class="process-scheme"><p class="process-scheme__caption" id="scheme-demo-analysis">Схема процесса</p><ol aria-labelledby="scheme-demo-analysis"><li>Записи встреч</li><li>Оценка и проверка цитат</li><li>SQL и таблица</li><li>Ответ с источниками</li></ol></div>
+          <p><strong>Результат.</strong> Агент в Mattermost находит встречи, сравнивает результаты и собирает ответы с источниками. После сбоя публикацию можно повторить без повторной оплаты готового анализа. Неполный охват данных обозначается в ответе.</p>
+          <p><strong>Инструменты.</strong> Python · SQL · Pydantic · Mattermost · LLM API · pytest.</p>
+          <p><strong>Формат проекта.</strong> Код закрыт. Публичный кейс описывает архитектуру и проверки. Измерения из других кейсов здесь не дублируются.</p>
+          <p><a href="https://github.com/Inspired-0/Inspired-0/blob/main/case-studies/demo-analysis.md">Читать разбор на GitHub ↗</a></p>
+        </div>
+      </article>
+
+      <article class="case-card" id="case-skincheck-ai">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 06</span><span class="case-visual__main">Изображение.<br>Проверка.<br>Структура.</span><span class="case-visual__caption">Понятная граница между клиентом и AI</span></div>
+        <p class="case-card__category">Веб-приложение / Техническая демонстрация</p>
+        <h3 class="case-card__title">SkinCheck AI</h3>
+        <p class="case-card__summary">Демонстрация обработки изображений: проверка файла на сервере, единый интерфейс AI-провайдера и проверка структуры ответа.</p>
+        <p class="case-card__stack">TypeScript · React · Vite · Express · Zod</p>
+        <p><a class="case-card__more" data-case-link href="#case-skincheck-ai-details">Подробности проекта ↗</a></p>
+        <div class="case-details" data-case-details id="case-skincheck-ai-details">
+          <h4 class="case-details__title">SkinCheck AI — подробности</h4>
+          <p><strong>Задача.</strong> Показать путь изображения от веб-клиента до провайдера с проверкой входных данных и результата.</p>
+          <p><strong>Решение.</strong> API проверяет размер, формат, сигнатуру и декодирование изображения. Файл находится в памяти только во время запроса. Ответ провайдера проверяется через Zod.</p>
+          <div class="process-scheme"><p class="process-scheme__caption" id="scheme-skincheck-ai">Схема процесса</p><ol aria-labelledby="scheme-skincheck-ai"><li>Изображение</li><li>Проверка файла</li><li>Mock-провайдер</li><li>Проверка ответа</li></ol></div>
+          <p><strong>Результат.</strong> Открытый пример запускается с mock-провайдером без API-ключа и внешней передачи изображения. В репозитории есть синтетический пример, тесты и описание архитектуры.</p>
+          <p><strong>Инструменты.</strong> TypeScript · React · Vite · Express · Zod.</p>
+          <p><strong>Формат проекта.</strong> Техническая демонстрация. Mock-провайдер не анализирует состояние кожи; проект не ставит диагноз и не заменяет врача.</p>
+          <p><a href="https://github.com/Inspired-0/skincheck-ai">Смотреть открытый код ↗</a></p>
+        </div>
+      </article>
+
+      <article class="case-card" id="case-telegram-claude-agent">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 07</span><span class="case-visual__main">Один владелец.<br>Один чат.<br>Контекст на месте.</span><span class="case-visual__caption">Telegram ↔ Claude CLI</span></div>
+        <p class="case-card__category">Личный инструмент / AI-агент</p>
+        <h3 class="case-card__title">Telegram Claude Agent</h3>
+        <p class="case-card__summary">Связывает личный Telegram-чат с Claude CLI: доступ только владельцу, сохранение контекста сессии и ограниченный набор инструментов чтения.</p>
+        <p class="case-card__stack">Python · aiogram · Claude CLI · pytest</p>
+        <p><a class="case-card__more" data-case-link href="#case-telegram-claude-agent-details">Подробности проекта ↗</a></p>
+        <div class="case-details" data-case-details id="case-telegram-claude-agent-details">
+          <h4 class="case-details__title">Telegram Claude Agent — подробности</h4>
+          <p><strong>Задача.</strong> Дать владельцу доступ к локальному Claude CLI из Telegram с ограниченными возможностями выполнения действий.</p>
+          <p><strong>Решение.</strong> Бот проверяет идентификатор чата, передаёт запрос через stdin и использует фиксированный список Read, Glob, Grep. Состояние сессии обновляется атомарно, журнал содержит метаданные без текста переписки.</p>
+          <div class="process-scheme"><p class="process-scheme__caption" id="scheme-telegram-claude-agent">Схема процесса</p><ol aria-labelledby="scheme-telegram-claude-agent"><li>Личный чат</li><li>Проверка владельца</li><li>Claude CLI</li><li>Ответ в Telegram</li></ol></div>
+          <p><strong>Результат.</strong> Опубликован самостоятельный инженерный пример с командами новой сессии и проверки статуса, тестами и описанием модели угроз.</p>
+          <p><strong>Инструменты.</strong> Python · aiogram · Claude CLI · pytest.</p>
+          <p><strong>Формат проекта.</strong> Пример для одного владельца и локального запуска. Вложения и многопользовательский доступ не входят в опубликованную версию.</p>
+          <p><a href="https://github.com/Inspired-0/telegram-claude-agent">Смотреть открытый код ↗</a></p>
+        </div>
+      </article>
+
+      <article class="case-card" id="case-ai-legal-docs">
+        <div class="case-visual" aria-hidden="true"><span class="case-visual__number">ПРОЕКТ / 08</span><span class="case-visual__main">Запрос → поля.<br>Шаблон →<br>документ.</span><span class="case-visual__caption">Извлечение данных и проверяемые расчёты</span></div>
+        <p class="case-card__category">Документы / Техническая демонстрация</p>
+        <h3 class="case-card__title">AI Legal Docs</h3>
+        <p class="case-card__summary">Конвейер заполнения DOCX: извлекает структурированные поля, проверяет значения и заполняет подготовленный шаблон документа.</p>
+        <p class="case-card__stack">Python · DOCX · docxtpl · pytest</p>
+        <p><a class="case-card__more" data-case-link href="#case-ai-legal-docs-details">Подробности проекта ↗</a></p>
+        <div class="case-details" data-case-details id="case-ai-legal-docs-details">
+          <h4 class="case-details__title">AI Legal Docs — подробности</h4>
+          <p><strong>Задача.</strong> Разделить извлечение данных из запроса, расчёты и текст документа, чтобы результат можно было проверить.</p>
+          <p><strong>Решение.</strong> Extractor возвращает значения полей. Код проверяет обязательные данные, рассчитывает суммы и заполняет шаблон через docxtpl. Готовый DOCX проверяется на незаполненные слоты.</p>
+          <div class="process-scheme"><p class="process-scheme__caption" id="scheme-ai-legal-docs">Схема процесса</p><ol aria-labelledby="scheme-ai-legal-docs"><li>Запрос</li><li>Извлечение и проверка полей</li><li>Расчёты</li><li>DOCX по шаблону</li></ol></div>
+          <p><strong>Результат.</strong> Открытая демонстрация создаёт документ на вымышленных данных с MockExtractor. Для запуска не нужны ключи LLM; интерфейс подключения модели отделён от ядра.</p>
+          <p><strong>Инструменты.</strong> Python · DOCX · docxtpl · pytest.</p>
+          <p><strong>Формат проекта.</strong> Демонстрация архитектуры. Синтетический шаблон не предназначен для реальной сделки без юридической проверки; модель не сочиняет условия договора.</p>
+          <p><a href="https://github.com/Inspired-0/ai-legal-docs">Смотреть открытый код ↗</a></p>
+        </div>
+      </article>
+    </section>
+
+    <!-- Section 4: how I work — the chain from studying the process to measuring the effect. -->
+    <section id="approach" aria-labelledby="approach-title">
+      <p class="section-label">03 / Подход</p>
+      <h2 id="approach-title">Как я работаю</h2>
+      <p>От изучения процесса до измерения эффекта — одна цепочка: проблема → решение → результат.</p>
+      <ol>
+        <li class="approach__step"><strong>Разбираюсь в процессе.</strong> Смотрю, как устроен путь пользователя и работа команды и где теряется результат.</li>
+        <li class="approach__step"><strong>Нахожу, что автоматизировать.</strong> Воронки и CJM, обращения и повторяющиеся ручные операции.</li>
+        <li class="approach__step"><strong>Проектирую решение и интеграции.</strong> Пайплайн, интеграции через API, требования и критерии приёмки.</li>
+        <li class="approach__step"><strong>Запускаю пилот.</strong> Сначала рабочий процесс на реальных задачах, затем развитие решения.</li>
+        <li class="approach__step"><strong>Проверяю качество.</strong> Критерии качества, сравнение версий на фиксированном наборе данных, решение о доработке по чек-листу.</li>
+        <li class="approach__step"><strong>Измеряю эффект.</strong> Продуктовые метрики и время выполнения до и после изменения.</li>
+      </ol>
+    </section>
+
+    <!-- Section 5: fit with the vacancy. Directions are interests, not the company's known problems. -->
+    <section id="fit" aria-labelledby="fit-title">
+      <p class="section-label">04 / Следующая глава</p>
+      <h2 id="fit-title">Почему мне интересна Goulash.Tech</h2>
+      <p>Интересен сам формат работы где ты ведешь от начала до конца реализацию мини проекта, мне как кросфункциональному специалисту это нравится и дает возможность проявить креативность, также это постоянно новый контекст и новая проблема, значит можно искать новые подходы и прокачивать экспектность.</p>
+      <p>Далее надеюсь что смогу уже принимать решение более высокого уровня и в общем определять развитие направления или продукта</p>
+      <h3 id="fit-directions-title">Направления интереса</h3>
+      <ul aria-labelledby="fit-directions-title">
+        <li class="fit__direction">Исследование ручных операций.</li>
+        <li class="fit__direction">Пилоты внутренних инструментов.</li>
+        <li class="fit__direction">Оценка качества и эффекта.</li>
+      </ul>
+    </section>
+
+    <!-- Section 6: public contact channels and the GitHub profile. -->
+    <section id="contacts" aria-labelledby="contacts-title">
+      <p class="section-label">05 / На связи</p>
+      <h2 id="contacts-title">Продолжим разговор?</h2>
+      <p>О процессах, продуктах и задачах, в которых ИИ может быть полезен.</p>
+      <ul>
+        <li><a class="contacts__link" href="https://t.me/quidcumfacie">Телеграм: @quidcumfacie</a></li>
+        <li><a class="contacts__link" href="mailto:barnaky28@gmail.com">barnaky28@gmail.com</a></li>
+        <li><a class="contacts__link" href="https://github.com/Inspired-0">GitHub: Inspired-0 ↗</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- Page footer: authorship line and the repeated results disclaimer. -->
+  <footer class="site-footer">
+    <p>Владимир Тарасенко</p>
+    <p class="disclaimer">Числовые результаты приведены по резюме. Описания GitHub-проектов — по публичным материалам автора.</p>
+  </footer>
+
+  <!--
+    Case dialog — the panel scripts/case-dialog.js opens for a card's «Подробности кейса» link.
+
+    It ships empty on purpose: at open time the card's own div.case-details node is MOVED into
+    #case-dialog-body and moved back on close, so the page never holds two copies of a case text
+    and never two elements with the same id (spec §10).
+
+    With JavaScript off this element is invisible and inert — MDN, <dialog>: «If the open
+    attribute is not set, the dialog box will not be visible to the user»
+    (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/dialog). That is the
+    intended fallback: the card link stays an ordinary anchor to the details section below it.
+
+    autofocus sits on the close button per MDN's recommendation for modal dialogs — «If no other
+    element involves more immediate interaction, it is recommended to add autofocus to the close
+    button inside the dialog». Nothing inside a case description asks for interaction, so the way
+    out is the element the reader may need first; the dialog's own name is announced from
+    aria-labelledby when focus enters it.
+  -->
+  <dialog class="case-dialog" id="case-dialog" aria-labelledby="case-dialog-title">
+    <h2 class="case-dialog__title" id="case-dialog-title"></h2>
+    <button class="case-dialog__close" data-dialog-close type="button" aria-label="Закрыть" autofocus>
+      <!-- Multiplication sign, not the letter x; hidden from assistive tech in favour of aria-label. -->
+      <span aria-hidden="true">×</span>
+    </button>
+    <div class="case-dialog__body" id="case-dialog-body"></div>
+  </dialog>
+
+  <!-- Progressive enhancement entry point: deferred by default, so it runs after this markup. -->
+  <script type="module" src="scripts/main.js"></script>
+</body>
+</html>

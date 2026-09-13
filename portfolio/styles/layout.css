@@ -1,0 +1,462 @@
+/*
+ * layout.css — the page shell: container, sticky header, history grid, breakpoints.
+ *
+ * Responsibility: where things sit, not how they look. It owns the centred reading
+ * container and the measure, the sticky site header (including the `--header-height`
+ * contract every anchor target depends on), the two-column history layout with its chapter
+ * rail, the vertical section rhythm, the skip link and the scroll margins that keep
+ * anchored headings out from under the header. Component surfaces — hero, case cards,
+ * buttons, result lists — belong to components.css and are deliberately absent here.
+ *
+ * Loaded after base.css, whose :root tokens (--color-*, --step-*, --font-*) this file only
+ * consumes and never redeclares. The fluid type scale required by spec §4 (h1 40–80 px,
+ * body 17–20 px) is already delivered there by --step-4 / --step-0, so no clamp() for type
+ * is repeated here.
+ *
+ * Contract produced for later tasks (navigation.js, components.css, print.css):
+ *   --header-height  the sticky header's exact border-box height at the current breakpoint,
+ *                    a fixed px value so calc() consumers stay predictable.
+ */
+
+:root {
+  /*
+   * --header-height IS the header's height: .site-header sets `block-size:
+   * var(--header-height)`, so the two can only be changed together (see the @media blocks
+   * at the bottom — each one changes this value and nothing else about the header's box).
+   * 56 px fits one row of 14–16 px nav links plus their focus ring on a 360 px screen.
+   * Fixed px, not a relative unit: every anchor's scroll-margin-top is computed from it and
+   * a value that drifted with the font size would let headings slide under the header.
+   */
+  --header-height: 56px;
+
+  /*
+   * Page container. --content-max is the widest the header row and section content ever
+   * get (spec §4 «поля, боковой указатель глав и читаемая центральная колонка»); beyond
+   * that the side gutters simply grow, because the container is centred. --gutter is the
+   * minimum breathing room on the narrow end, where there is no slack left.
+   */
+  --content-max: 1120px;
+  --gutter: clamp(1rem, 0.5rem + 2vw, 2.5rem);
+
+  /*
+   * Reading measure, spec §4 «ориентир 60–75 знаков в строке». The value is in ch — the
+   * advance of the "0" glyph — and Cyrillic lowercase is noticeably narrower than a digit
+   * in Inter, so the 68ch the brief suggests renders around 80 characters per line, over
+   * the target. Measured in Chromium at 1440 px by counting the characters of the widest
+   * laid-out line (per-character Ranges grouped by line box): 60ch measured 59–61
+   * characters on the first line of the three .chapter__lead paragraphs, under the 62-char
+   * floor, so the value moved to 62ch. Re-measure if the body font or --step-0 changes.
+   */
+  --measure: 62ch;
+
+  /*
+   * History layout. --rail-width is the fixed left column of #path at ≥1024 px; the
+   * reading column takes the rest, then the measure caps the prose inside it.
+   */
+  --rail-width: 11rem;
+
+  /* Vertical rhythm: between sections, between blocks inside one, between chapters. */
+  --space-section: clamp(3rem, 2rem + 3.5vw, 5.5rem);
+  --space-flow: clamp(1rem, 0.75rem + 1vw, 1.75rem);
+  --space-chapter: clamp(2.5rem, 1.75rem + 3vw, 4.5rem);
+}
+
+/* --- Container ----------------------------------------------------------------------- */
+
+/*
+ * Every top-level band of the page (sections, footer) is a centred box of at most
+ * --content-max plus its gutters, so their text edges line up with the header row above.
+ * max-inline-size includes the padding because base.css sets border-box sizing, hence the
+ * `+ 2 * gutter`: it keeps the *content* width at --content-max on wide screens.
+ */
+#main > section,
+.site-footer {
+  max-inline-size: calc(var(--content-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* Section rhythm: the vertical band each section occupies. */
+#main > section {
+  padding-block: var(--space-section);
+}
+
+/*
+ * Flow spacing inside a section — the "owl": every child after the first gets top space.
+ * #path is excluded because it is a grid whose spacing is set by the rail/chapter rules
+ * below (a stray margin there would open a gap above the two-column row).
+ */
+#main > section:not(#path) > * + *,
+.chapter > * + *,
+.case-card > * + * {
+  margin-block-start: var(--space-flow);
+}
+
+/*
+ * The measure applies to running text only. Rail chips and the nav are not prose, so they
+ * opt out; without the reset they would inherit a 56ch cap and, more importantly, the
+ * chip row would stop shrinking on a narrow screen.
+ */
+#main p,
+#main li {
+  max-inline-size: var(--measure);
+}
+
+.chapter-rail__list li {
+  max-inline-size: none;
+}
+
+/* --- Skip link ----------------------------------------------------------------------- */
+
+/*
+ * Visually hidden until it takes keyboard focus, then pinned to the top-left corner above
+ * the header (z-index 30 > the header's 10). It is moved off-screen with a transform
+ * rather than `display: none` / `visibility: hidden`, both of which would take it out of
+ * the focus order and defeat its purpose (spec §11 «ссылка пропуска к основному
+ * содержимому»). `position: fixed` keeps it out of the document flow, so the hidden state
+ * cannot add page height or horizontal overflow.
+ */
+.skip-link {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 30;
+  padding: 0.75rem 1.25rem;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-rule);
+  text-decoration: none;
+  /* Off-screen while unfocused; 150% clears its own border and focus ring. */
+  transform: translateY(-150%);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* --- Sticky header -------------------------------------------------------------------- */
+
+/*
+ * One row at every width: name on the left, nav on the right, never wrapping to a second
+ * line — its height is fixed at --header-height and the nav absorbs the pressure by
+ * scrolling inside itself (see .site-nav).
+ *
+ * position: sticky + top: 0 — MDN: "At least one inset property … needs to be set to a
+ * non-auto value for the axis on which the element needs to be made sticky", and the
+ * element "sticks to its nearest ancestor that has a scrolling mechanism (created when
+ * overflow is hidden, scroll, auto, or overlay)". Here the only ancestors are <body> and
+ * <html>, neither of which this project ever gives an overflow value, so the header sticks
+ * to the viewport. Nothing in this file may introduce `overflow` on body or html.
+ * Source: https://developer.mozilla.org/en-US/docs/Web/CSS/position#sticky_positioning
+ *
+ * The opaque background is what makes it readable over the content passing underneath; the
+ * hairline separates it from prose of the same colour. Both are on the border box, and
+ * border-box sizing (base.css) keeps the rendered height exactly --header-height — the
+ * anchor maths below depends on that equality.
+ */
+.site-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 2rem);
+  block-size: var(--header-height);
+  background-color: var(--color-bg);
+  border-block-end: 1px solid var(--color-rule);
+  /*
+   * Gutters on narrow screens; on wide ones the larger half-difference wins and the header
+   * row lines up with the --content-max container below it.
+   */
+  padding-inline: max(var(--gutter), calc((100% - var(--content-max)) / 2));
+}
+
+/* The name is the "home" link; it must never wrap, or the row would grow a second line. */
+.site-header__name {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: var(--step--1);
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+/*
+ * Two variants of the name live in the markup; exactly one is displayed at any width. The
+ * initials take over below 480 px (see the max-width block after this rule), where the full
+ * name plus four nav links do not fit on one row: the nav then overflowed into its own
+ * sideways scroll and «Контакты» sat off screen with no affordance.
+ *
+ * `display: none` (not visibility/opacity) on the inactive variant is deliberate: it takes
+ * the element out of the accessibility tree as well as the layout, so the link never exposes
+ * two names. The stable accessible name comes from aria-label on the link itself — see the
+ * comment on that element in index.html.
+ */
+.site-header__name-short {
+  display: none;
+}
+
+/*
+ * The nav is the only flexible part of the row. `min-inline-size: 0` lets it shrink below
+ * its content width (a flex item's default min-width is auto, which would refuse to shrink
+ * and push the header wider than the viewport — the horizontal-overflow failure this whole
+ * block exists to prevent). Once it is narrower than its links, overflow-x: auto turns it
+ * into its own scroll container: the links scroll sideways inside the header instead of
+ * the page scrolling sideways.
+ * Source: https://developer.mozilla.org/en-US/docs/Web/CSS/overflow-x
+ *
+ * `margin-inline-start: auto` right-aligns the nav instead of `justify-content: flex-end`,
+ * which in an overflowing scroll container pushes the first links out of reach on the
+ * unreachable start side.
+ */
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.5rem);
+  min-inline-size: 0;
+  margin-inline-start: auto;
+  block-size: 100%;
+  overflow-x: auto;
+  /* A sideways flick in the nav must not turn into a page-level gesture. */
+  overscroll-behavior-inline: contain;
+  /* Slim scrollbar so it fits inside the fixed header height; falls back to the default. */
+  scrollbar-width: thin;
+}
+
+/*
+ * Vertical padding is deliberate: the focus ring (2 px outline + 2 px offset from
+ * base.css) has to fit inside the nav's scroll container, which clips on both axes once
+ * overflow-x is set. Link box 24–35 px + ring stays well under the 56 px header.
+ */
+.site-nav__link {
+  flex: 0 0 auto;
+  padding-block: 0.35rem;
+  font-size: var(--step--1);
+  white-space: nowrap;
+  /* Navigation chrome, not running text: the underline appears on hover instead. */
+  text-decoration: none;
+}
+
+.site-nav__link:hover {
+  text-decoration: underline;
+}
+
+/*
+ * The one max-width query in this otherwise mobile-first file. It is written this way on
+ * purpose: the full name is the normal state of the header, and this block is the narrow
+ * exception that swaps it for initials so that all four nav links fit the row at 360 px
+ * without the nav scrolling. overflow-x: auto above stays as a safety net for widths or
+ * font settings we have not measured — with this block it is no longer the working mode.
+ *
+ * The nav gap is not touched here: at 360 px the shared clamp already resolves to its 0.75rem
+ * floor, and with the initials in place the four links plus that gap fit the row with room to
+ * spare (see .workteam/sdd/portfolio-plan/final-fix-verify.js for the measured numbers). The
+ * link's own 0.35rem block padding and font size are likewise unchanged — tightening either
+ * would only shrink the touch target.
+ */
+@media (max-width: 479px) {
+  .site-header__name-full {
+    display: none;
+  }
+
+  .site-header__name-short {
+    display: inline;
+  }
+}
+
+/* --- Anchor targets ------------------------------------------------------------------- */
+
+/*
+ * Every element the page can jump to keeps a header's worth of clearance plus 1rem, so a
+ * heading is never hidden under the sticky header (spec §9, §14.5). Tied to the header by
+ * the same variable that sets its height, so the two cannot drift apart.
+ *
+ * MDN documents scroll-margin-top in terms of the scroll snap area only, and does not
+ * state its effect on fragment navigation; the browser behaviour relied on here is
+ * verified empirically by tests/layout.spec.js («header nav anchors land below the sticky
+ * header»), not asserted from the documentation.
+ * Source: https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-margin-top
+ *
+ * #main is in the list because it is an anchor target too — it is where the skip link
+ * lands. Without it, the 48 px top padding of the first section is all that separates the
+ * h1 from the viewport top, and at 360 px (56 px header) the heading came out 8 px under
+ * the header; measured before adding this line.
+ */
+#main,
+#main section,
+.chapter,
+[data-case-details] {
+  scroll-margin-top: calc(var(--header-height) + 1rem);
+}
+
+/* --- History section: rail + chapters -------------------------------------------------- */
+
+/*
+ * #path is a grid at every width so the rail can be reordered: in the DOM it precedes the
+ * <h2> (it is the section's navigation), but it must read *after* the heading. `order`
+ * moves it visually without touching the markup; no focusable element changes place
+ * relative to another, so the tab order still matches what is on screen.
+ *
+ * row-gap stays 0 on purpose — see the rail's grid-row span below. Vertical rhythm between
+ * chapters comes from margins instead.
+ */
+#path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+#path > h2 {
+  order: 1;
+}
+
+#chapter-rail {
+  order: 2;
+  margin-block: var(--space-flow);
+}
+
+#path > .chapter {
+  order: 3;
+}
+
+#path > .chapter + .chapter {
+  margin-block-start: var(--space-chapter);
+}
+
+/*
+ * Below 1024 px the rail is a one-row strip of chapter chips that scrolls inside itself —
+ * the same technique as the header nav, for the same reason: the strip must never widen
+ * the page. It is not sticky here; on a short screen a pinned strip would eat the little
+ * reading height there is.
+ */
+.chapter-rail__list {
+  display: flex;
+  gap: 0.5rem;
+  /* The markup is an <ol>; markers and the UA indent make no sense for a chip row. */
+  list-style: none;
+  padding: 0 0 0.25rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.chapter-rail__link {
+  display: inline-block;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--color-rule);
+  border-radius: 999px;
+  font-size: var(--step--1);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.chapter-rail__link:hover {
+  border-color: var(--color-accent);
+}
+
+/* --- Breakpoint: 768 px ---------------------------------------------------------------- */
+
+/*
+ * Taller header from the tablet width up: there is room for a larger name and a roomier
+ * row. --header-height changes in the same rule that changes the header's height, and
+ * nowhere else — that is the whole point of keeping the token here.
+ */
+@media (min-width: 768px) {
+  :root {
+    --header-height: 64px;
+  }
+
+  .site-header__name {
+    font-size: 1.0625rem;
+  }
+
+  .site-nav__link {
+    font-size: 1rem;
+  }
+}
+
+/* --- Breakpoint: 1024 px — two-column history ------------------------------------------ */
+
+@media (min-width: 1024px) {
+  #path {
+    grid-template-columns: var(--rail-width) minmax(0, 1fr);
+    column-gap: clamp(2rem, 4vw, 4rem);
+  }
+
+  /* Heading and chapters share the reading column; the rail owns the narrow one. */
+  #path > h2,
+  #path > .chapter {
+    grid-column: 2;
+  }
+
+  /*
+   * On the narrow layouts the rail strip sits between the heading and the first chapter and
+   * its own margins open that gap. Here the rail moves to column 1, so the first chapter
+   * would butt straight against the section heading — it gets the chapter rhythm instead.
+   */
+  #path > .chapter:first-of-type {
+    margin-block-start: var(--space-chapter);
+  }
+
+  /*
+   * The rail is sticky inside the section, so it stays put while chapters scroll past. A
+   * sticky grid item is constrained to its grid area, so the area has to cover the whole
+   * section: `grid-row: 1 / span 50` does that. `1 / -1` does NOT — MDN: a negative line
+   * number "counts in reverse, starting from the end edge of the explicit grid", and the
+   * chapters live in implicit rows, so -1 would resolve to line 2 and pin the rail to the
+   * height of the heading.
+   * Source: https://developer.mozilla.org/en-US/docs/Web/CSS/grid-row#values
+   *
+   * 50 is simply far more rows than the column ever uses (1 heading + 6 chapters today),
+   * so adding chapters cannot shorten the sticky range. The surplus rows are empty and
+   * size to 0 — which only holds while row-gap on #path is 0; do not add one.
+   *
+   * `align-self: start` keeps the rail its natural height inside that tall area, which is
+   * what makes sticky meaningful (a stretched item has nowhere to travel). `top` repeats
+   * the anchor clearance so the rail never slides under the header either.
+   */
+  #chapter-rail {
+    order: 0;
+    grid-column: 1;
+    grid-row: 1 / span 50;
+    align-self: start;
+    position: sticky;
+    inset-block-start: calc(var(--header-height) + 1.5rem);
+    margin-block: 0;
+  }
+
+  /* On the wide layout the chips become a plain vertical list along a hairline. */
+  .chapter-rail__list {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.15rem 0 0.15rem 0.9rem;
+    border-inline-start: 2px solid var(--color-rule);
+    overflow: visible;
+  }
+
+  .chapter-rail__link {
+    display: block;
+    padding: 0.2rem 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .chapter-rail__link:hover {
+    text-decoration: underline;
+  }
+}
+
+/* --- Footer ---------------------------------------------------------------------------- */
+
+/*
+ * Closing band of the shell: the same container as the sections, separated by the page's
+ * hairline. Typography of the disclaimer inside it belongs to components.css.
+ */
+.site-footer {
+  padding-block: var(--space-flow);
+  border-block-start: 1px solid var(--color-rule);
+  margin-block-start: var(--space-section);
+}
+
+.site-footer > * + * {
+  margin-block-start: 0.5rem;
+}

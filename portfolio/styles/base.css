@@ -1,0 +1,173 @@
+/*
+ * base.css — design tokens, reset and base typography for the portfolio.
+ *
+ * Responsibility: everything that is true for the whole document and nothing that is
+ * specific to a block. It declares the token contract on :root that every later
+ * stylesheet (layout.css, components.css, motion.css, print.css) consumes, applies a
+ * modest reset, sets the reading typography, the link and focus styles, and gates smooth
+ * scrolling behind prefers-reduced-motion. Component rules do NOT belong here.
+ *
+ * Loaded after assets/fonts/fonts.css, which declares the local @font-face rules; the
+ * families referenced by --font-display / --font-body come from there.
+ */
+
+:root {
+  /*
+   * Palette. Reference values from spec §4; the terracotta second accent is chosen here.
+   *
+   * Contrast measured against the page background #F6F4EF with the WCAG 2.1
+   * relative-luminance formula (sRGB linearisation, (L1 + 0.05) / (L2 + 0.05)), computed
+   * rather than eyeballed:
+   *   #202622 graphite text    — 14.03:1  (body text, AA and AAA)
+   *   #285547 deep green       —  7.70:1  (accent text, links, AA and AAA)
+   *   #B4532A terracotta       —  4.54:1  (text-safe: clears the 4.5:1 AA floor, but only
+   *                                        just — do not lighten it without re-measuring)
+   *   #5B6660 muted grey-green —  5.44:1  (secondary text: dates, captions, meta lines)
+   *   #C9C2B1 rule             —  1.61:1  (decorative hairlines only; it is below 3:1, so
+   *                                        it must never carry text or outline a control)
+   */
+  --color-bg: #F6F4EF;
+  --color-text: #202622;
+  --color-accent: #285547;
+  /* terracotta #B4532A on #F6F4EF — 4.54:1, measured with the WCAG formula; text-safe */
+  --color-accent-2: #B4532A;
+  --color-muted: #5B6660;
+  --color-rule: #C9C2B1;
+
+  /*
+   * Font stacks. The fallbacks are listed so the page is readable before the woff2 files
+   * arrive (font-display: swap does the rest): a serif for the display face, the platform
+   * UI sans for the body face.
+   */
+  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+
+  /*
+   * Type scale, fluid between the 360 px and 1440 px viewports of the check matrix
+   * (spec §11). Each clamp() is min / linear interpolation / max, so the size grows with
+   * the viewport and then stops — no unbounded vw units, which would break 200 % zoom.
+   *   --step--1  14 → 16 px   captions, meta
+   *   --step-0   17 → 20 px   body copy (spec §4: «основной текст 17–20 px»)
+   *   --step-1   20 → 25 px   lead paragraphs
+   *   --step-2   24 → 33 px   h3
+   *   --step-3   30 → 44 px   h2
+   *   --step-4   40 → 80 px   h1 (spec §4: «заголовок первого экрана около 40–80 px»)
+   */
+  --step--1: clamp(0.875rem, 0.833rem + 0.185vw, 1rem);
+  --step-0: clamp(1.0625rem, 1rem + 0.278vw, 1.25rem);
+  --step-1: clamp(1.25rem, 1.146rem + 0.463vw, 1.5625rem);
+  --step-2: clamp(1.5rem, 1.3125rem + 0.833vw, 2.0625rem);
+  --step-3: clamp(1.875rem, 1.583rem + 1.296vw, 2.75rem);
+  --step-4: clamp(2.5rem, 1.667rem + 3.704vw, 5rem);
+}
+
+/* --- Reset: the few defaults that get in the way, nothing more. --------------------- */
+
+*,
+*::before,
+*::after {
+  /* Padding and borders count inside declared widths — the assumption every later
+     stylesheet is written against. */
+  box-sizing: border-box;
+}
+
+body,
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+ul,
+ol,
+dl,
+dd {
+  /* Vertical rhythm is set deliberately by the later stylesheets, not by UA margins. */
+  margin: 0;
+}
+
+img,
+svg {
+  /* An image never widens the page; height: auto keeps the aspect ratio when it shrinks. */
+  max-width: 100%;
+  height: auto;
+}
+
+/* --- Base typography ---------------------------------------------------------------- */
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  /* 1.6 keeps long Russian paragraphs comfortable; headings override it below. */
+  line-height: 1.6;
+  /* Long Russian compounds must not push a narrow 360 px layout into horizontal scroll. */
+  overflow-wrap: break-word;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  /* Tight leading for large display type; balance keeps two-line headings even. */
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--step-4);
+}
+
+h2 {
+  font-size: var(--step-3);
+}
+
+h3 {
+  font-size: var(--step-2);
+}
+
+h4 {
+  font-size: var(--step-1);
+}
+
+/* --- Links --------------------------------------------------------------------------- */
+
+a {
+  color: var(--color-accent);
+  /* Underline stays: colour alone must not be the only signal for a link in running text. */
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  /* Terracotta is never used for body-size text; hover keeps the green accent colour and
+     signals the state through the underline only (decoration colour/thickness, not text). */
+  text-decoration-color: var(--color-accent-2);
+  text-decoration-thickness: 0.1em;
+}
+
+/* --- Focus --------------------------------------------------------------------------- */
+
+:focus-visible {
+  /* Keyboard focus is always visible (spec §11). `outline: none` is forbidden on every
+     interactive control — links, buttons, form fields; the offset keeps the ring off the
+     glyphs. The single documented exemption is #main, the skip-link target: a non-interactive
+     element that is focused programmatically only, and the rule that drops its ring lives in
+     components.css with its reasoning. */
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* --- Motion gate ---------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    /* Smooth anchor scrolling is an enhancement: readers who asked for reduced motion get
+       the instant jump instead, because the rule simply never applies to them. */
+    scroll-behavior: smooth;
+  }
+}

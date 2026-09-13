@@ -1,0 +1,16 @@
+<!--
+  Favicon: the career-line glyph - the page's own metaphor (#path, the rail marker). Chosen
+  over the initials because two letters are mush at the 16 px a tab renders.
+
+  Colours are copied literally from the accent and background tokens in styles/base.css: a
+  linked icon is a separate document and cannot read the page's custom properties, so keep the
+  two in step by hand. (No token name is spelled out above: a doubled hyphen is illegal inside
+  an XML comment and makes the whole file undecodable - browsers fail it silently.)
+  Nothing external, no script: an icon is fetched in a restricted context. viewBox scales the
+  mark to any tab, bookmark or installed-app size.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" fill="#F6F4EF"/>
+  <path d="M5 25 12 18 18 21 25 10" fill="none" stroke="#285547" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="25" cy="10" r="3.6" fill="#285547"/>
+</svg>

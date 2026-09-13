@@ -1,0 +1,39 @@
+# Internal project documentation and local agent instructions
+/docs/
+/AGENTS.md
+/CLAUDE.md
+/.codex/
+/.claude/
+/.workteam/
+/.worktrees/
+
+# Local temp files and logs
+/tmp/
+*.log
+
+# Source documents kept out of the public repo (personal data)
+/*.doc
+/*.docx
+/*.pdf
+/*.rtf
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Node tooling and Playwright artifacts (the site itself needs no build)
+/node_modules/
+/test-results/
+/playwright-report/
+/coverage/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+/.idea/
+/.vscode/
